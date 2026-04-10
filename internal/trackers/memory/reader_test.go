@@ -28,20 +28,31 @@ func TestListCandidatesReturnsSeededItemsAndDeepCopies(t *testing.T) {
 		t.Fatalf("ListCandidates len = %d, want 1", len(got))
 	}
 
-	got[0].Labels[0] = "mutated"
-	got[0].BlockedBy[0].State = "Closed"
-	*got[0].Priority = 99
-	*got[0].Routable = false
-	createdAt := got[0].CreatedAt.Add(6 * time.Hour)
-	updatedAt := got[0].UpdatedAt.Add(6 * time.Hour)
-	*got[0].CreatedAt = createdAt
-	*got[0].UpdatedAt = updatedAt
+	mutateTestItem(&got[0])
 
 	again, err := reader.ListCandidates(context.Background())
 	if err != nil {
 		t.Fatalf("second ListCandidates error = %v, want nil", err)
 	}
 	assertTestItemUnmutated(t, again[0])
+}
+
+func TestNewReaderSnapshotsSeedItems(t *testing.T) {
+	t.Parallel()
+
+	seed := []domain.WorkItem{testItem("item-1", "MT-1", "Todo")}
+	reader := NewReader(seed)
+
+	mutateTestItem(&seed[0])
+
+	got, err := reader.ListCandidates(context.Background())
+	if err != nil {
+		t.Fatalf("ListCandidates error = %v, want nil", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("ListCandidates len = %d, want 1", len(got))
+	}
+	assertTestItemUnmutated(t, got[0])
 }
 
 func TestListByStatesNormalizesInputAndHandlesEmpty(t *testing.T) {
@@ -64,14 +75,7 @@ func TestListByStatesNormalizesInputAndHandlesEmpty(t *testing.T) {
 		t.Fatalf("ListByStates IDs = [%s %s], want [item-1 item-2]", got[0].ID, got[1].ID)
 	}
 
-	got[0].Labels[0] = "mutated"
-	got[0].BlockedBy[0].State = "Closed"
-	*got[0].Priority = 99
-	*got[0].Routable = false
-	createdAt := got[0].CreatedAt.Add(6 * time.Hour)
-	updatedAt := got[0].UpdatedAt.Add(6 * time.Hour)
-	*got[0].CreatedAt = createdAt
-	*got[0].UpdatedAt = updatedAt
+	mutateTestItem(&got[0])
 
 	again, err := reader.ListByStates(context.Background(), []string{"todo"})
 	if err != nil {
@@ -111,14 +115,7 @@ func TestRefreshByIDsPreservesRequestOrderAndHandlesEmpty(t *testing.T) {
 		t.Fatalf("RefreshByIDs IDs = [%s %s], want [item-c item-a]", got[0].ID, got[1].ID)
 	}
 
-	got[0].Labels[0] = "mutated"
-	got[0].BlockedBy[0].State = "Closed"
-	*got[0].Priority = 99
-	*got[0].Routable = false
-	createdAt := got[0].CreatedAt.Add(6 * time.Hour)
-	updatedAt := got[0].UpdatedAt.Add(6 * time.Hour)
-	*got[0].CreatedAt = createdAt
-	*got[0].UpdatedAt = updatedAt
+	mutateTestItem(&got[0])
 
 	again, err := reader.RefreshByIDs(context.Background(), []string{"item-c"})
 	if err != nil {
@@ -172,6 +169,17 @@ func intPtr(v int) *int { return &v }
 func boolPtr(v bool) *bool { return &v }
 
 func timePtr(v time.Time) *time.Time { return &v }
+
+func mutateTestItem(item *domain.WorkItem) {
+	item.Labels[0] = "mutated"
+	item.BlockedBy[0].State = "Closed"
+	*item.Priority = 99
+	*item.Routable = false
+	createdAt := item.CreatedAt.Add(6 * time.Hour)
+	updatedAt := item.UpdatedAt.Add(6 * time.Hour)
+	*item.CreatedAt = createdAt
+	*item.UpdatedAt = updatedAt
+}
 
 func assertTestItemUnmutated(t *testing.T, item domain.WorkItem) {
 	t.Helper()
