@@ -21,7 +21,7 @@ func TestNewStoreFailsWithoutKnownGoodWorkflow(t *testing.T) {
 func TestNewStoreSupportsInjectedFileOps(t *testing.T) {
 	t.Parallel()
 
-	content := []byte("Injected prompt\n")
+	content := []byte(validWorkflowContent("Injected prompt"))
 	modTime := time.Unix(123, 0)
 
 	store, err := NewStore(
@@ -55,7 +55,7 @@ func TestNewStoreSupportsInjectedFileOps(t *testing.T) {
 func TestStoreCurrentReloadsAfterTick(t *testing.T) {
 	t.Parallel()
 
-	path := writeWorkflowFile(t, "WORKFLOW.md", "First prompt\n")
+	path := writeWorkflowFile(t, "WORKFLOW.md", validWorkflowContent("First prompt"))
 	ticks := make(chan time.Time, 1)
 
 	store, err := NewStore(
@@ -70,7 +70,7 @@ func TestStoreCurrentReloadsAfterTick(t *testing.T) {
 		_ = store.Close()
 	}()
 
-	if err := overwriteFile(path, "Second prompt\n"); err != nil {
+	if err := overwriteFile(path, validWorkflowContent("Second prompt")); err != nil {
 		t.Fatalf("overwrite workflow: %v", err)
 	}
 
@@ -85,7 +85,7 @@ func TestStoreCurrentReloadsAfterTick(t *testing.T) {
 func TestStoreForceReloadKeepsLastKnownGoodOnInvalidContent(t *testing.T) {
 	t.Parallel()
 
-	path := writeWorkflowFile(t, "WORKFLOW.md", "Initial prompt\n")
+	path := writeWorkflowFile(t, "WORKFLOW.md", validWorkflowContent("Initial prompt"))
 	ticks := make(chan time.Time)
 	var logs []string
 
@@ -126,7 +126,7 @@ func TestStoreForceReloadKeepsLastKnownGoodOnInvalidContent(t *testing.T) {
 func TestStoreSetWorkflowPathRetriesFailedPathSwitch(t *testing.T) {
 	t.Parallel()
 
-	initialPath := writeWorkflowFile(t, "WORKFLOW.md", "Initial prompt\n")
+	initialPath := writeWorkflowFile(t, "WORKFLOW.md", validWorkflowContent("Initial prompt"))
 	nextPath := initialPath + ".next"
 
 	store, err := NewStore(
@@ -152,7 +152,7 @@ func TestStoreSetWorkflowPathRetriesFailedPathSwitch(t *testing.T) {
 		t.Fatalf("expected cached prompt, got %q", got.PromptTemplate)
 	}
 
-	if err := overwriteFile(nextPath, "Recovered prompt\n"); err != nil {
+	if err := overwriteFile(nextPath, validWorkflowContent("Recovered prompt")); err != nil {
 		t.Fatalf("write recovered workflow: %v", err)
 	}
 
@@ -176,11 +176,11 @@ func TestStoreClearWorkflowPathSwitchesBackToDefaultPath(t *testing.T) {
 	})
 
 	initialPath := filepath.Join(tempDir, "EXPLICIT_WORKFLOW.md")
-	if err := overwriteFile(initialPath, "Explicit prompt\n"); err != nil {
+	if err := overwriteFile(initialPath, validWorkflowContent("Explicit prompt")); err != nil {
 		t.Fatalf("write explicit workflow: %v", err)
 	}
 	defaultPath := filepath.Join(tempDir, workflowFileName)
-	if err := overwriteFile(defaultPath, "Default prompt\n"); err != nil {
+	if err := overwriteFile(defaultPath, validWorkflowContent("Default prompt")); err != nil {
 		t.Fatalf("write default workflow: %v", err)
 	}
 	actualWD, err := os.Getwd()
@@ -230,6 +230,10 @@ func waitForPrompt(t *testing.T, store *Store, want string) Workflow {
 
 func overwriteFile(path, content string) error {
 	return writeFile(path, strings.NewReader(content))
+}
+
+func validWorkflowContent(prompt string) string {
+	return "---\ntracker:\n  kind: linear\n  api_key: token\n  project_slug: project\n---\n" + prompt + "\n"
 }
 
 type stubFileInfo struct {

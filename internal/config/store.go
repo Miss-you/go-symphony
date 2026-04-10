@@ -31,12 +31,17 @@ type workflowStamp struct {
 	hash    uint64
 }
 
+type storeSnapshot struct {
+	loadedPath string
+	workflow   Workflow
+	settings   Settings
+	stamp      workflowStamp
+}
+
 type Store struct {
 	mu          sync.RWMutex
 	desiredPath string
-	loadedPath  string
-	workflow    Workflow
-	stamp       workflowStamp
+	snapshot    storeSnapshot
 	fileOps     fileOps
 	logf        func(string, ...any)
 	ticks       <-chan time.Time
@@ -60,16 +65,14 @@ func NewStore(opts ...StoreOption) (*Store, error) {
 		return nil, err
 	}
 
-	workflow, stamp, err := loadState(desiredPath, options.fileOps)
+	snapshot, err := loadSnapshot(desiredPath, options.fileOps)
 	if err != nil {
 		return nil, err
 	}
 
 	store := &Store{
 		desiredPath: desiredPath,
-		loadedPath:  desiredPath,
-		workflow:    workflow,
-		stamp:       stamp,
+		snapshot:    snapshot,
 		fileOps:     options.fileOps,
 		logf:        options.logf,
 		stop:        make(chan struct{}),
@@ -92,15 +95,29 @@ func NewStore(opts ...StoreOption) (*Store, error) {
 func (s *Store) Current() (Workflow, error) {
 	if err := s.attemptReload(false); err != nil {
 		s.mu.RLock()
-		workflow := s.workflow
+		workflow := s.snapshot.workflow
 		s.mu.RUnlock()
 		return workflow, nil
 	}
 
 	s.mu.RLock()
-	workflow := s.workflow
+	workflow := s.snapshot.workflow
 	s.mu.RUnlock()
 	return workflow, nil
+}
+
+func (s *Store) CurrentSettings() (Settings, error) {
+	if err := s.attemptReload(false); err != nil {
+		s.mu.RLock()
+		settings := s.snapshot.settings
+		s.mu.RUnlock()
+		return settings, nil
+	}
+
+	s.mu.RLock()
+	settings := s.snapshot.settings
+	s.mu.RUnlock()
+	return settings, nil
 }
 
 func (s *Store) ForceReload() error {
@@ -165,10 +182,10 @@ func (s *Store) attemptReload(force bool) error {
 }
 
 func (s *Store) reloadLocked(force bool) error {
-	shouldReload := force || s.desiredPath != s.loadedPath
+	shouldReload := force || s.desiredPath != s.snapshot.loadedPath
 	if !shouldReload {
 		currentStamp, err := currentStamp(s.desiredPath, s.fileOps)
-		if err == nil && currentStamp == s.stamp {
+		if err == nil && currentStamp == s.snapshot.stamp {
 			return nil
 		}
 		shouldReload = true
@@ -178,16 +195,33 @@ func (s *Store) reloadLocked(force bool) error {
 		return nil
 	}
 
-	workflow, stamp, err := loadState(s.desiredPath, s.fileOps)
+	snapshot, err := loadSnapshot(s.desiredPath, s.fileOps)
 	if err != nil {
 		s.logf("failed to reload workflow path=%s err=%v; keeping last known good configuration", s.desiredPath, err)
 		return err
 	}
 
-	s.workflow = workflow
-	s.loadedPath = s.desiredPath
-	s.stamp = stamp
+	s.snapshot = snapshot
 	return nil
+}
+
+func loadSnapshot(path string, ops fileOps) (storeSnapshot, error) {
+	workflow, stamp, err := loadState(path, ops)
+	if err != nil {
+		return storeSnapshot{}, err
+	}
+
+	settings, err := ParseSettings(workflow)
+	if err != nil {
+		return storeSnapshot{}, err
+	}
+
+	return storeSnapshot{
+		loadedPath: path,
+		workflow:   workflow,
+		settings:   settings,
+		stamp:      stamp,
+	}, nil
 }
 
 func loadState(path string, ops fileOps) (Workflow, workflowStamp, error) {
