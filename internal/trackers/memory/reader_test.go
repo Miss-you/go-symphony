@@ -41,24 +41,7 @@ func TestListCandidatesReturnsSeededItemsAndDeepCopies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second ListCandidates error = %v, want nil", err)
 	}
-	if again[0].Labels[0] != "backend" {
-		t.Fatalf("Labels leaked mutation: got %q", again[0].Labels[0])
-	}
-	if again[0].BlockedBy[0].State != "In Progress" {
-		t.Fatalf("BlockedBy leaked mutation: got %q", again[0].BlockedBy[0].State)
-	}
-	if priority := derefInt(t, again[0].Priority); priority != 2 {
-		t.Fatalf("Priority leaked mutation: got %d, want 2", priority)
-	}
-	if routable := derefBool(t, again[0].Routable); !routable {
-		t.Fatalf("Routable leaked mutation: got %v, want true", routable)
-	}
-	if got := derefTime(t, again[0].CreatedAt); !got.Equal(testCreatedAt()) {
-		t.Fatalf("CreatedAt leaked mutation: got %v, want %v", got, testCreatedAt())
-	}
-	if got := derefTime(t, again[0].UpdatedAt); !got.Equal(testUpdatedAt()) {
-		t.Fatalf("UpdatedAt leaked mutation: got %v, want %v", got, testUpdatedAt())
-	}
+	assertTestItemUnmutated(t, again[0])
 }
 
 func TestListByStatesNormalizesInputAndHandlesEmpty(t *testing.T) {
@@ -80,6 +63,24 @@ func TestListByStatesNormalizesInputAndHandlesEmpty(t *testing.T) {
 	if got[0].ID != "item-1" || got[1].ID != "item-2" {
 		t.Fatalf("ListByStates IDs = [%s %s], want [item-1 item-2]", got[0].ID, got[1].ID)
 	}
+
+	got[0].Labels[0] = "mutated"
+	got[0].BlockedBy[0].State = "Closed"
+	*got[0].Priority = 99
+	*got[0].Routable = false
+	createdAt := got[0].CreatedAt.Add(6 * time.Hour)
+	updatedAt := got[0].UpdatedAt.Add(6 * time.Hour)
+	*got[0].CreatedAt = createdAt
+	*got[0].UpdatedAt = updatedAt
+
+	again, err := reader.ListByStates(context.Background(), []string{"todo"})
+	if err != nil {
+		t.Fatalf("second ListByStates error = %v, want nil", err)
+	}
+	if len(again) != 1 {
+		t.Fatalf("second ListByStates len = %d, want 1", len(again))
+	}
+	assertTestItemUnmutated(t, again[0])
 
 	got, err = reader.ListByStates(context.Background(), nil)
 	if err != nil {
@@ -109,6 +110,24 @@ func TestRefreshByIDsPreservesRequestOrderAndHandlesEmpty(t *testing.T) {
 	if got[0].ID != "item-c" || got[1].ID != "item-a" {
 		t.Fatalf("RefreshByIDs IDs = [%s %s], want [item-c item-a]", got[0].ID, got[1].ID)
 	}
+
+	got[0].Labels[0] = "mutated"
+	got[0].BlockedBy[0].State = "Closed"
+	*got[0].Priority = 99
+	*got[0].Routable = false
+	createdAt := got[0].CreatedAt.Add(6 * time.Hour)
+	updatedAt := got[0].UpdatedAt.Add(6 * time.Hour)
+	*got[0].CreatedAt = createdAt
+	*got[0].UpdatedAt = updatedAt
+
+	again, err := reader.RefreshByIDs(context.Background(), []string{"item-c"})
+	if err != nil {
+		t.Fatalf("second RefreshByIDs error = %v, want nil", err)
+	}
+	if len(again) != 1 {
+		t.Fatalf("second RefreshByIDs len = %d, want 1", len(again))
+	}
+	assertTestItemUnmutated(t, again[0])
 
 	got, err = reader.RefreshByIDs(context.Background(), []string{})
 	if err != nil {
@@ -153,6 +172,29 @@ func intPtr(v int) *int { return &v }
 func boolPtr(v bool) *bool { return &v }
 
 func timePtr(v time.Time) *time.Time { return &v }
+
+func assertTestItemUnmutated(t *testing.T, item domain.WorkItem) {
+	t.Helper()
+
+	if item.Labels[0] != "backend" {
+		t.Fatalf("Labels leaked mutation: got %q", item.Labels[0])
+	}
+	if item.BlockedBy[0].State != "In Progress" {
+		t.Fatalf("BlockedBy leaked mutation: got %q", item.BlockedBy[0].State)
+	}
+	if priority := derefInt(t, item.Priority); priority != 2 {
+		t.Fatalf("Priority leaked mutation: got %d, want 2", priority)
+	}
+	if routable := derefBool(t, item.Routable); !routable {
+		t.Fatalf("Routable leaked mutation: got %v, want true", routable)
+	}
+	if got := derefTime(t, item.CreatedAt); !got.Equal(testCreatedAt()) {
+		t.Fatalf("CreatedAt leaked mutation: got %v, want %v", got, testCreatedAt())
+	}
+	if got := derefTime(t, item.UpdatedAt); !got.Equal(testUpdatedAt()) {
+		t.Fatalf("UpdatedAt leaked mutation: got %v, want %v", got, testUpdatedAt())
+	}
+}
 
 func derefInt(t *testing.T, v *int) int {
 	t.Helper()

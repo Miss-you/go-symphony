@@ -1,4 +1,4 @@
-# T10 Review 2
+# T10 Review 1 Round 2
 
 High severity:
 - None. The previous orchestrator-gate mismatch was removed, and the deep-copy requirement for `domain.WorkItem` is now explicit.
