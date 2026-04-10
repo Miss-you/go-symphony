@@ -35,12 +35,7 @@ The task must not:
 - Create change: `freeze-compatibility-contract`
 - Scope the change to exactly one capability: `compatibility-contract`
 
-Expected change artifacts before archive:
-
-- `openspec/changes/freeze-compatibility-contract/proposal.md`
-- `openspec/changes/freeze-compatibility-contract/design.md`
-- `openspec/changes/freeze-compatibility-contract/tasks.md`
-- `openspec/changes/freeze-compatibility-contract/specs/compatibility-contract/spec.md`
+The accepted V1 plan expected a pre-archive change named `freeze-compatibility-contract`.
 
 Archived repo paths after archive:
 

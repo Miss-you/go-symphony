@@ -15,16 +15,22 @@
 
 ### 1. OpenSpec validation
 
-Command:
+Command in landed repo state:
 
 ```bash
 openspec validate compatibility-contract
 ```
 
+Historical pre-archive gate:
+
+```bash
+openspec validate freeze-compatibility-contract
+```
+
 Why this matters:
 
 - Proves the landed main spec is internally consistent and still valid in the merged repo state.
-- The pre-archive execution of `T01` separately ran `openspec validate freeze-compatibility-contract` before archive.
+- Preserves the exact change-level validation that was run before archive during task execution.
 
 ### 2. Contract-content consistency review
 
