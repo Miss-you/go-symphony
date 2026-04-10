@@ -11,7 +11,9 @@ description: Use when an approved go-symphony design or task exists, the next st
 
 **核心原则：** 只有当仓库产物、验证证据、OpenSpec 状态和任务板状态全部一致时，这个任务才算真正完成。
 
-**REQUIRED SUB-SKILLS:** `deriving-task-board-from-design`, `openspec-explore`, `openspec-ff-change`, `openspec-apply-change`, `openspec-sync-specs`, `openspec-archive-change`, `test-driven-development`, `requesting-code-review`, `receiving-code-review`, `verification-before-completion`
+**隔离规则：** 从任务启动开始，后续 research、spec、实现、验证和 review 都必须在隔离的 git worktree 中进行，避免与同仓其他进行中的任务互相污染。
+
+**REQUIRED SUB-SKILLS:** `using-git-worktrees`, `deriving-task-board-from-design`, `openspec-explore`, `openspec-ff-change`, `openspec-apply-change`, `openspec-sync-specs`, `openspec-archive-change`, `test-driven-development`, `requesting-code-review`, `receiving-code-review`, `verification-before-completion`
 
 每个阶段切换前，都先更新 task 文档，再进入下一阶段。
 
@@ -63,7 +65,7 @@ description: Use when an approved go-symphony design or task exists, the next st
 阶段目标：
 
 - 选出一个真正可做的任务
-- 把 task 文档、workspace 和 owner 关系固定下来
+- 先建立隔离 worktree，再把 task 文档、workspace 和 owner 关系固定下来
 
 执行：
 
@@ -71,19 +73,28 @@ description: Use when an approved go-symphony design or task exists, the next st
 2. 读取对应的 `*-design-task.md`。
 3. 如果 task 文档不存在，停止当前流程，改用 `deriving-task-board-from-design`。
 4. 选择一个可认领任务：`status=todo` 且所有硬依赖都已经 `done`。
-5. 先把 task 文档更新为 `claimed`。
-6. 创建 `workspace/<task-id>/`。
-7. 当 workspace 已存在且正式开始调研时，把任务切到 `research`。
+5. 在修改 task 文档、创建 `workspace/<task-id>/`、开始 research、创建 OpenSpec change 或写任何实现代码之前，必须先调用 `using-git-worktrees` 创建隔离 worktree。
+6. 只有当 worktree 已创建、已完成该 skill 要求的基线校验、并且后续操作将继续在该 worktree 中进行时，才允许继续。
+7. 在该隔离 worktree 中，先把 task 文档更新为 `claimed`。
+8. 在该隔离 worktree 中，创建 `workspace/<task-id>/`。
+9. 只有当上述动作都已经在该隔离 worktree 中完成，且正式开始调研时，才把任务切到 `research`。
 
 校验：
 
+- worktree 已创建，且后续任务执行上下文已经切换到该隔离 worktree
 - task 文档已更新
 - `workspace/<task-id>/` 真实存在
 - 认领信息、`Owner`、`Claimed At` 已落盘
 
+阶段验收阈值：
+
+- worktree 已经按 `using-git-worktrees` 建好并完成基线校验
+- 在共享主工作区里不再继续该任务的 research / spec / 实现 / 验证 / review
+- 只有满足这两条，任务才允许进入 `research`
+
 修复与复验：
 
-- 如果认领记录缺失或 workspace 未创建，就先补齐，不要继续后续阶段
+- 如果认领记录缺失、workspace 未创建，或 worktree 尚未就绪，就先补齐，不要继续后续阶段
 
 默认规则：
 
@@ -276,8 +287,8 @@ description: Use when an approved go-symphony design or task exists, the next st
 
 | 阶段 | 最小证据 |
 | --- | --- |
-| `claimed` | task 文档已更新，且 `workspace/<task-id>/` 已存在 |
-| `research` | `original_impl.md` + `new_impl.md` |
+| `claimed` | worktree 已就绪，task 文档已更新，且 `workspace/<task-id>/` 已存在 |
+| `research` | `original_impl.md` + `new_impl.md`，且这些产物生成于该任务的隔离 worktree |
 | `spec` | `final_impl.md` + OpenSpec change + `test_strategy.md` |
 | `implementing` | 代码实现已在对应 change 下展开 |
 | `verifying` | lint/build/tests 已执行，并能解释它们证明了什么 |
@@ -289,6 +300,7 @@ description: Use when an approved go-symphony design or task exists, the next st
 如果出现这些情况，就暂停并纠正流程：
 
 - 任务还没认领就开始写代码
+- 还没建立隔离 worktree，就在共享主工作区里直接开始 research、spec、实现或验证
 - 结论留在聊天里，没有落到 `workspace/<task-id>/`
 - `final_impl.md` 没经过带 rubric 的评审就被接受
 - `test_strategy.md` 只是列测试，不解释这些测试证明什么
@@ -299,7 +311,9 @@ description: Use when an approved go-symphony design or task exists, the next st
 ## 常见错误
 
 - 把 `80` 分门槛用成主观印象，而不是明确评分
+- 认领任务后才想起建立隔离 worktree，导致 claim / workspace / 初始调研已经污染共享主工作区
 - 不小心让一个 OpenSpec change 覆盖多个任务
 - 阶段切换时忘记回写 task 文档
+- 虽然开了 worktree，但后续又回到共享主工作区继续推进同一个任务
 - 对同一写集乱开并行 agent
 - 因为测试已经过了，就跳过最终的源实现对比
