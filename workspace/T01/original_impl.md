@@ -6,7 +6,7 @@ Task `T01 Compatibility Contract` asks what the current Symphony implementation 
 
 ## Primary Source Artifacts
 
-### `/Users/lihui/Documents/GitHub/symphony/SPEC.md`
+### `openai/symphony:SPEC.md`
 
 - Defines Symphony as a language-agnostic service specification rather than an Elixir-only architecture.
 - Establishes the key service boundary:
@@ -28,7 +28,7 @@ Task `T01 Compatibility Contract` asks what the current Symphony implementation 
   - mandated sandbox/approval posture
 - Defines the strongest language-agnostic source for the boundary that the Go port should preserve.
 
-### `/Users/lihui/Documents/GitHub/symphony/elixir/README.md`
+### `openai/symphony:elixir/README.md`
 
 - Documents the concrete user-facing behavior of the current reference implementation:
   - poll Linear for work
@@ -48,7 +48,7 @@ Task `T01 Compatibility Contract` asks what the current Symphony implementation 
   - invalid later reload keeps last known good workflow
   - terminal issue states trigger agent stop and workspace cleanup
 
-### `/Users/lihui/Documents/GitHub/symphony/elixir/WORKFLOW.md`
+### `openai/symphony:elixir/WORKFLOW.md`
 
 - Freezes the in-repo workflow contract shape:
   - YAML front matter for config
@@ -64,7 +64,7 @@ Task `T01 Compatibility Contract` asks what the current Symphony implementation 
 - Encodes workflow and handoff expectations that later compatibility work must preserve even if internal architecture changes.
 - Encodes the default unattended Linear workflow semantics around `Backlog`, `Todo`, `In Progress`, `Human Review`, `Rework`, `Merging`, and `Done`.
 
-### `/Users/lihui/Documents/GitHub/symphony/elixir/AGENTS.md`
+### `openai/symphony:elixir/AGENTS.md`
 
 - Reinforces that the Elixir implementation should stay aligned with the language-agnostic `SPEC.md`.
 - Calls out critical invariants:
@@ -74,21 +74,21 @@ Task `T01 Compatibility Contract` asks what the current Symphony implementation 
   - behavior/config changes must update docs alongside code
 - Makes explicit that the Elixir implementation may be a superset of the root spec, but must not conflict with it.
 
-### `/Users/lihui/Documents/GitHub/symphony/elixir/lib/symphony_elixir/orchestrator.ex`
+### `openai/symphony:elixir/lib/symphony_elixir/orchestrator.ex`
 
 - Confirms the orchestrator owns runtime truth for polling, claimed/running/retry bookkeeping, continuation retry, failure retry, reconciliation, and operator-visible updates.
 
-### `/Users/lihui/Documents/GitHub/symphony/elixir/lib/symphony_elixir/tracker.ex`
+### `openai/symphony:elixir/lib/symphony_elixir/tracker.ex`
 
 - Shows the current Elixir implementation exposes tracker writes at the adapter boundary.
 - This is precisely the behavior the Go design intentionally narrows: tracker reads belong to the core contract, but generic tracker writes should not expand the Go core interface.
 
-### `/Users/lihui/Documents/GitHub/symphony/elixir/lib/symphony_elixir/prompt_builder.ex`
+### `openai/symphony:elixir/lib/symphony_elixir/prompt_builder.ex`
 
 - Confirms prompt rendering is built from issue data plus retry attempt context.
 - Reinforces that prompt rendering is part of the compatibility surface, even if internal implementation changes.
 
-### `/Users/lihui/Documents/GitHub/symphony/elixir/lib/symphony_elixir_web/router.ex`
+### `openai/symphony:elixir/lib/symphony_elixir_web/router.ex`
 
 - Confirms the concrete web/API compatibility surface:
   - `/`

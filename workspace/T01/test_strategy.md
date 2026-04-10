@@ -18,13 +18,13 @@
 Command:
 
 ```bash
-openspec validate freeze-compatibility-contract
+openspec validate compatibility-contract
 ```
 
 Why this matters:
 
-- Proves the change artifacts are internally consistent and satisfy OpenSpec schema requirements.
-- This is the primary gate that the change is safe to sync and archive.
+- Proves the landed main spec is internally consistent and still valid in the merged repo state.
+- The pre-archive execution of `T01` separately ran `openspec validate freeze-compatibility-contract` before archive.
 
 ### 2. Contract-content consistency review
 
@@ -34,7 +34,8 @@ Command:
 rg -n "WORKFLOW.md|default unattended Linear workflow|WorkItem|provider|linear_graphql|no universal tracker write interface|no universal workpad abstraction|observability" \
   docs/plans/2026-04-10-go-symphony-design.md \
   workspace/T01/final_impl.md \
-  openspec/changes/freeze-compatibility-contract/specs/compatibility-contract/spec.md
+  openspec/specs/compatibility-contract/spec.md \
+  openspec/changes/archive/2026-04-10-freeze-compatibility-contract/specs/compatibility-contract/spec.md
 ```
 
 Why this matters:
@@ -91,7 +92,7 @@ Not applicable because no runnable service or compatibility surface is implement
 
 `T01` passes verification only if:
 
-- `openspec validate freeze-compatibility-contract` passes
+- `openspec validate compatibility-contract` passes
 - the content check shows the required contract points are present
 - the diff-based scope guard confirms no `T02` skeleton/code paths are part of this task's change set
 - the synced main spec exists after sync/archive

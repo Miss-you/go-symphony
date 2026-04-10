@@ -35,12 +35,19 @@ The task must not:
 - Create change: `freeze-compatibility-contract`
 - Scope the change to exactly one capability: `compatibility-contract`
 
-Expected change artifacts:
+Expected change artifacts before archive:
 
 - `openspec/changes/freeze-compatibility-contract/proposal.md`
 - `openspec/changes/freeze-compatibility-contract/design.md`
 - `openspec/changes/freeze-compatibility-contract/tasks.md`
 - `openspec/changes/freeze-compatibility-contract/specs/compatibility-contract/spec.md`
+
+Archived repo paths after archive:
+
+- `openspec/changes/archive/2026-04-10-freeze-compatibility-contract/proposal.md`
+- `openspec/changes/archive/2026-04-10-freeze-compatibility-contract/design.md`
+- `openspec/changes/archive/2026-04-10-freeze-compatibility-contract/tasks.md`
+- `openspec/changes/archive/2026-04-10-freeze-compatibility-contract/specs/compatibility-contract/spec.md`
 
 ### Main spec after sync/archive
 
@@ -122,7 +129,7 @@ This keeps contract drift visible in repo artifacts instead of chat history.
 
 `T01` should be considered complete only if all of the following are true:
 
-1. `openspec validate freeze-compatibility-contract` passes.
+1. `openspec validate compatibility-contract` passes in the landed repo state, and `openspec validate freeze-compatibility-contract` was run pre-archive during task execution.
 2. The change spec captures parity scope, terminology mapping, boundary rules, and explicit non-goals.
 3. The synced main spec exists under `openspec/specs/compatibility-contract/spec.md`, and it reflects the same contract as the change delta.
 4. The task board, workspace artifacts, and OpenSpec change name all agree.

@@ -6,7 +6,7 @@ Task `T01 Compatibility Contract` asks what durable artifacts already exist in `
 
 ## Existing Durable Artifacts
 
-### `/Users/lihui/Documents/GitHub/go-symphony/docs/plans/2026-04-10-go-symphony-design.md`
+### `docs/plans/2026-04-10-go-symphony-design.md`
 
 - This is the only real contract artifact in the repo today.
 - It already contains the material T01 needs:
@@ -17,17 +17,17 @@ Task `T01 Compatibility Contract` asks what durable artifacts already exist in `
   - anti-overdesign constraints
   - rough task breakdown and acceptance criteria for `T01`
 
-### `/Users/lihui/Documents/GitHub/go-symphony/docs/plans/2026-04-10-go-symphony-design-task.md`
+### `docs/plans/2026-04-10-go-symphony-design-task.md`
 
 - This task board is now the execution truth source.
 - It is required for status tracking, but it is derivative of the design rather than the compatibility contract itself.
 
-### `/Users/lihui/Documents/GitHub/go-symphony/README.md`
+### `README.md`
 
 - Establishes repository identity only.
 - It does not define compatibility behavior, boundaries, or acceptance criteria.
 
-### `/Users/lihui/Documents/GitHub/go-symphony/openspec/config.yaml`
+### `openspec/config.yaml`
 
 - Confirms OpenSpec is configured.
 - The repo is structurally ready to express T01 as a change plus stable specs.
@@ -41,7 +41,7 @@ Task `T01 Compatibility Contract` asks what durable artifacts already exist in `
 
 ## Design Constraints That Must Govern T01
 
-From `/Users/lihui/Documents/GitHub/go-symphony/docs/plans/2026-04-10-go-symphony-design.md`:
+From `docs/plans/2026-04-10-go-symphony-design.md`:
 
 - User-facing parity comes first; architecture may become more Go-native.
 - The system is intentionally split into:

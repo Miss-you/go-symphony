@@ -79,10 +79,10 @@ Compatibility surfaces may remain issue-centric even when core internals use pro
 
 Create and validate:
 
-- `openspec/changes/freeze-compatibility-contract/proposal.md`
-- `openspec/changes/freeze-compatibility-contract/design.md`
-- `openspec/changes/freeze-compatibility-contract/tasks.md`
-- `openspec/changes/freeze-compatibility-contract/specs/compatibility-contract/spec.md`
+- `openspec/changes/archive/2026-04-10-freeze-compatibility-contract/proposal.md`
+- `openspec/changes/archive/2026-04-10-freeze-compatibility-contract/design.md`
+- `openspec/changes/archive/2026-04-10-freeze-compatibility-contract/tasks.md`
+- `openspec/changes/archive/2026-04-10-freeze-compatibility-contract/specs/compatibility-contract/spec.md`
 - `workspace/T01/test_strategy.md`
 
 After sync/archive, the durable landing point must be:
@@ -93,7 +93,8 @@ After sync/archive, the durable landing point must be:
 
 `T01` is complete only when all of the following are true:
 
-1. `openspec validate freeze-compatibility-contract` passes.
+1. `openspec validate compatibility-contract` passes in the landed repo state.
+   The change-level validation `openspec validate freeze-compatibility-contract` was run pre-archive during task execution.
 2. The change delta captures parity scope, terminology mapping, boundary rules, and explicit non-goals.
 3. `openspec/specs/compatibility-contract/spec.md` exists after sync and matches the change contract.
 4. The task board, workspace artifacts, and OpenSpec change name agree.
