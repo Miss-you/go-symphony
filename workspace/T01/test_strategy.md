@@ -21,16 +21,10 @@ Command in landed repo state:
 openspec validate compatibility-contract
 ```
 
-Historical pre-archive gate:
-
-```bash
-openspec validate freeze-compatibility-contract
-```
-
 Why this matters:
 
 - Proves the landed main spec is internally consistent and still valid in the merged repo state.
-- Preserves the exact change-level validation that was run before archive during task execution.
+- Records that task execution also ran a pre-archive change-level validation step before the change was archived.
 
 ### 2. Contract-content consistency review
 
