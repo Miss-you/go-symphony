@@ -1,6 +1,7 @@
 package config
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,9 +12,43 @@ import (
 func TestNewStoreFailsWithoutKnownGoodWorkflow(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewStore(withWorkflowPath("missing/WORKFLOW.md"))
+	_, err := NewStore(WithWorkflowPath("missing/WORKFLOW.md"))
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestNewStoreSupportsInjectedFileOps(t *testing.T) {
+	t.Parallel()
+
+	content := []byte("Injected prompt\n")
+	modTime := time.Unix(123, 0)
+
+	store, err := NewStore(
+		WithWorkflowPath("virtual/WORKFLOW.md"),
+		withFileOps(fileOps{
+			readFile: func(string) ([]byte, error) { return content, nil },
+			statFile: func(string) (fs.FileInfo, error) {
+				return stubFileInfo{size: int64(len(content)), modTime: modTime}, nil
+			},
+			hash: func([]byte) uint64 { return 1 },
+		}),
+		withTickChannel(make(chan time.Time)),
+		withLogf(func(string, ...any) {}),
+	)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+	}()
+
+	got, err := store.Current()
+	if err != nil {
+		t.Fatalf("Current: %v", err)
+	}
+	if got.PromptTemplate != "Injected prompt" {
+		t.Fatalf("unexpected prompt: %#v", got)
 	}
 }
 
@@ -24,7 +59,7 @@ func TestStoreCurrentReloadsAfterTick(t *testing.T) {
 	ticks := make(chan time.Time, 1)
 
 	store, err := NewStore(
-		withWorkflowPath(path),
+		WithWorkflowPath(path),
 		withTickChannel(ticks),
 		withLogf(func(string, ...any) {}),
 	)
@@ -51,10 +86,12 @@ func TestStoreForceReloadKeepsLastKnownGoodOnInvalidContent(t *testing.T) {
 	t.Parallel()
 
 	path := writeWorkflowFile(t, "WORKFLOW.md", "Initial prompt\n")
+	ticks := make(chan time.Time)
 	var logs []string
 
 	store, err := NewStore(
-		withWorkflowPath(path),
+		WithWorkflowPath(path),
+		withTickChannel(ticks),
 		withLogf(func(format string, args ...any) {
 			logs = append(logs, format)
 		}),
@@ -93,7 +130,7 @@ func TestStoreSetWorkflowPathRetriesFailedPathSwitch(t *testing.T) {
 	nextPath := initialPath + ".next"
 
 	store, err := NewStore(
-		withWorkflowPath(initialPath),
+		WithWorkflowPath(initialPath),
 		withLogf(func(string, ...any) {}),
 	)
 	if err != nil {
@@ -152,7 +189,7 @@ func TestStoreClearWorkflowPathSwitchesBackToDefaultPath(t *testing.T) {
 	}
 
 	store, err := NewStore(
-		withWorkflowPath(initialPath),
+		WithWorkflowPath(initialPath),
 		withLogf(func(string, ...any) {}),
 	)
 	if err != nil {
@@ -194,3 +231,15 @@ func waitForPrompt(t *testing.T, store *Store, want string) Workflow {
 func overwriteFile(path, content string) error {
 	return writeFile(path, strings.NewReader(content))
 }
+
+type stubFileInfo struct {
+	size    int64
+	modTime time.Time
+}
+
+func (f stubFileInfo) Name() string       { return "" }
+func (f stubFileInfo) Size() int64        { return f.size }
+func (f stubFileInfo) Mode() fs.FileMode  { return 0 }
+func (f stubFileInfo) ModTime() time.Time { return f.modTime }
+func (f stubFileInfo) IsDir() bool        { return false }
+func (f stubFileInfo) Sys() any           { return nil }

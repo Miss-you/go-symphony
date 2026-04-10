@@ -133,6 +133,25 @@ func TestLoadMissingWorkflowFileReturnsTypedError(t *testing.T) {
 	}
 }
 
+func TestLoadInvalidYAMLFrontMatterReturnsTypedError(t *testing.T) {
+	t.Parallel()
+
+	path := writeWorkflowFile(t, "INVALID_YAML_WORKFLOW.md", "---\ntracker: [\n---\nPrompt body\n")
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	var loadErr *LoadError
+	if !errors.As(err, &loadErr) {
+		t.Fatalf("expected LoadError, got %T", err)
+	}
+	if loadErr.Code != ErrWorkflowParse {
+		t.Fatalf("unexpected code: got %q want %q", loadErr.Code, ErrWorkflowParse)
+	}
+}
+
 func TestLoadTrimsPromptBody(t *testing.T) {
 	t.Parallel()
 

@@ -13,10 +13,10 @@ import (
 type StoreOption func(*storeOptions)
 
 type storeOptions struct {
-	path   string
-	ticks  <-chan time.Time
+	path    string
+	ticks   <-chan time.Time
 	fileOps fileOps
-	logf   func(string, ...any)
+	logf    func(string, ...any)
 }
 
 type fileOps struct {
@@ -32,7 +32,7 @@ type workflowStamp struct {
 }
 
 type Store struct {
-	mu         sync.RWMutex
+	mu          sync.RWMutex
 	desiredPath string
 	loadedPath  string
 	workflow    Workflow
@@ -239,7 +239,7 @@ func defaultFileOps() fileOps {
 	}
 }
 
-func withWorkflowPath(path string) StoreOption {
+func WithWorkflowPath(path string) StoreOption {
 	return func(opts *storeOptions) {
 		opts.path = path
 	}
@@ -254,6 +254,22 @@ func withTickChannel(ticks <-chan time.Time) StoreOption {
 func withLogf(logf func(string, ...any)) StoreOption {
 	return func(opts *storeOptions) {
 		opts.logf = logf
+	}
+}
+
+func withFileOps(ops fileOps) StoreOption {
+	return func(opts *storeOptions) {
+		merged := opts.fileOps
+		if ops.readFile != nil {
+			merged.readFile = ops.readFile
+		}
+		if ops.statFile != nil {
+			merged.statFile = ops.statFile
+		}
+		if ops.hash != nil {
+			merged.hash = ops.hash
+		}
+		opts.fileOps = merged
 	}
 }
 
