@@ -1,2 +1,2 @@
-// Package orchestrator will hold the single-owner runtime loop.
+// Package orchestrator owns the single-owner runtime loop.
 package orchestrator
