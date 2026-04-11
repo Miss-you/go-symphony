@@ -20,12 +20,11 @@ func TestNewConstructsBridgeAndToolSpecsExposeLinearGraphQL(t *testing.T) {
 	var _ Client = (*lineartracker.HTTPClient)(nil)
 	var _ codex.ToolHandler = (*Bridge)(nil)
 
-	_, err := New(config.ProviderSettings{}, nil)
-	if !errors.Is(err, ErrMissingAPIToken) {
-		t.Fatalf("New without client/token error = %v, want %v", err, ErrMissingAPIToken)
+	bridge, err := New(config.ProviderSettings{}, nil)
+	if err != nil {
+		t.Fatalf("New without client/token returned error: %v", err)
 	}
 
-	bridge := mustBridge(t, &fakeClient{})
 	specs := bridge.ToolSpecs()
 	if len(specs) != 1 {
 		t.Fatalf("ToolSpecs len = %d, want 1", len(specs))
@@ -52,6 +51,31 @@ func TestNewConstructsBridgeAndToolSpecsExposeLinearGraphQL(t *testing.T) {
 	specs[0].Name = "mutated"
 	if got := bridge.ToolSpecs()[0].Name; got != "linear_graphql" {
 		t.Fatalf("ToolSpecs returned shared slice, got name %q", got)
+	}
+}
+
+func TestHandleToolReportsMissingAuthAtCallTime(t *testing.T) {
+	t.Parallel()
+
+	bridge, err := New(config.ProviderSettings{}, nil)
+	if err != nil {
+		t.Fatalf("New without client/token returned error: %v", err)
+	}
+
+	result, err := bridge.HandleTool(context.Background(), codex.ToolCall{
+		Name:      "linear_graphql",
+		Arguments: "query Viewer { viewer { id } }",
+	})
+	if err != nil {
+		t.Fatalf("HandleTool returned error: %v", err)
+	}
+	if result.Success {
+		t.Fatalf("result success = true, want false")
+	}
+	payload := decodeContentText(t, result)
+	errorPayload := payload["error"].(map[string]any)
+	if errorPayload["message"] != missingAuthMessage {
+		t.Fatalf("message = %#v, want %q", errorPayload["message"], missingAuthMessage)
 	}
 }
 
@@ -114,6 +138,7 @@ func TestHandleToolRejectsInvalidArgumentsBeforeLinearCall(t *testing.T) {
 	}{
 		{name: "blank raw", arguments: "   ", message: "`linear_graphql` requires a non-empty `query` string."},
 		{name: "missing query", arguments: map[string]any{"variables": map[string]any{"id": "issue-1"}}, message: "`linear_graphql` requires a non-empty `query` string."},
+		{name: "non-string query", arguments: map[string]any{"query": 123}, message: "`linear_graphql` requires a non-empty `query` string."},
 		{name: "invalid type", arguments: []any{"bad"}, message: "`linear_graphql` expects either a GraphQL query string or an object with `query` and optional `variables`."},
 		{name: "invalid variables", arguments: map[string]any{"query": "query Viewer { viewer { id } }", "variables": []any{"bad"}}, message: "`linear_graphql.variables` must be a JSON object when provided."},
 	}

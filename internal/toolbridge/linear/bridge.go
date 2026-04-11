@@ -45,9 +45,6 @@ type Bridge struct {
 func New(settings config.ProviderSettings, client Client) (*Bridge, error) {
 	if client == nil {
 		apiKey := strings.TrimSpace(settings.APIKey)
-		if apiKey == "" {
-			return nil, ErrMissingAPIToken
-		}
 		endpoint := strings.TrimSpace(settings.Endpoint)
 		if endpoint == "" {
 			endpoint = defaultEndpoint
@@ -133,6 +130,9 @@ type HTTPClient struct {
 }
 
 func (c *HTTPClient) GraphQL(ctx context.Context, query string, variables map[string]any) (map[string]any, error) {
+	if strings.TrimSpace(c.APIKey) == "" {
+		return nil, ErrMissingAPIToken
+	}
 	payload := map[string]any{"query": query, "variables": variables}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -396,21 +396,21 @@ func cloneMap(in map[string]any) map[string]any {
 }
 
 const createCommentMutation = `
-mutation SymphonyCreateComment($issueId: String!, $body: String!) {
+mutation SymphonyCreateComment($issueId: ID!, $body: String!) {
   commentCreate(input: {issueId: $issueId, body: $body}) {
     success
   }
 }`
 
 const updateStateMutation = `
-mutation SymphonyUpdateIssueState($issueId: String!, $stateId: String!) {
+mutation SymphonyUpdateIssueState($issueId: ID!, $stateId: ID!) {
   issueUpdate(id: $issueId, input: {stateId: $stateId}) {
     success
   }
 }`
 
 const stateLookupQuery = `
-query SymphonyResolveStateId($issueId: String!, $stateName: String!) {
+query SymphonyResolveStateId($issueId: ID!, $stateName: String!) {
   issue(id: $issueId) {
     team {
       states(filter: {name: {eq: $stateName}}, first: 1) {
