@@ -355,6 +355,62 @@ func TestRunTurnHandlesApprovalsUserInputAndTools(t *testing.T) {
 	)
 }
 
+func TestRunTurnPreservesRawStringToolArgumentsAndContentItems(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	workspacePath := filepath.Join(root, "MT-347")
+	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	rawQuery := "  query Viewer { viewer { id } }  "
+	transport := newScriptedTransport(
+		`{"id":1,"result":{}}`,
+		`{"id":2,"result":{"thread":{"id":"thread-347"}}}`,
+		`{"id":3,"result":{"turn":{"id":"turn-tools"}}}`,
+		`{"id":"tool-raw","method":"item/tool/call","params":{"tool":"linear_graphql","arguments":"`+rawQuery+`"}}`,
+		`{"method":"turn/completed","params":{}}`,
+	)
+	var gotArgs any
+	session := startTestSessionWithTool(t, root, workspacePath, transport, nil, ToolHandlerFunc(func(_ context.Context, call ToolCall) (ToolResult, error) {
+		gotArgs = call.Arguments
+		return ToolResult{
+			Success: true,
+			ContentItems: []ToolContentItem{
+				{Type: "inputText", Text: `{"data":{"viewer":{"id":"usr_123"}}}`},
+			},
+		}, nil
+	}))
+	defer func() { _ = session.Close() }()
+
+	if _, err := session.RunTurn(context.Background(), TurnRequest{Prompt: "use raw tool", Title: "MT-347"}); err != nil {
+		t.Fatalf("RunTurn returned error: %v", err)
+	}
+	if gotArgs != rawQuery {
+		t.Fatalf("tool arguments = %#v, want raw string %q", gotArgs, rawQuery)
+	}
+
+	toolResponse := responseForID(t, transport.writes(), "tool-raw")
+	result := mapValue(t, toolResponse, "result")
+	items, ok := result["contentItems"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("result.contentItems = %#v, want one content item", result["contentItems"])
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("content item = %#v, want map", items[0])
+	}
+	if item["type"] != "inputText" || item["text"] == "" {
+		t.Fatalf("content item = %#v, want inputText with text", item)
+	}
+	if nested, ok := result["result"].(map[string]any); ok {
+		if _, exists := nested["contentItems"]; exists {
+			t.Fatalf("contentItems nested under result.result: %#v", result)
+		}
+	}
+}
+
 func TestRunTurnRequiresNonInteractiveForUserInput(t *testing.T) {
 	t.Parallel()
 

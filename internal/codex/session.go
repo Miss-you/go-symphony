@@ -48,6 +48,7 @@ type Config struct {
 type ToolSpec struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
+	InputSchema map[string]any `json:"inputSchema,omitempty"`
 	Parameters  map[string]any `json:"parameters,omitempty"`
 }
 
@@ -97,13 +98,19 @@ type EventSink func(Event)
 type ToolCall struct {
 	ID        string
 	Name      string
-	Arguments map[string]any
+	Arguments any
+}
+
+type ToolContentItem struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
 }
 
 type ToolResult struct {
-	Success bool   `json:"success"`
-	Result  any    `json:"result,omitempty"`
-	Error   string `json:"error,omitempty"`
+	Success      bool              `json:"success"`
+	ContentItems []ToolContentItem `json:"contentItems,omitempty"`
+	Result       any               `json:"result,omitempty"`
+	Error        string            `json:"error,omitempty"`
 }
 
 type ToolHandler interface {
@@ -836,13 +843,19 @@ func toolCallName(payload map[string]any) string {
 	return ""
 }
 
-func toolCallArguments(payload map[string]any) map[string]any {
+func toolCallArguments(payload map[string]any) any {
 	params, _ := payload["params"].(map[string]any)
 	if args, ok := params["arguments"].(map[string]any); ok {
 		return cloneMap(args)
 	}
+	if args, ok := params["arguments"].(string); ok {
+		return args
+	}
 	if args, ok := params["args"].(map[string]any); ok {
 		return cloneMap(args)
+	}
+	if args, ok := params["args"].(string); ok {
+		return args
 	}
 	return map[string]any{}
 }
