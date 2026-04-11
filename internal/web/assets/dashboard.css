@@ -1,0 +1,274 @@
+:root {
+  color-scheme: light;
+  --page: #f7f8fa;
+  --panel: #ffffff;
+  --panel-soft: #f0f7f4;
+  --ink: #202123;
+  --muted: #69707a;
+  --line: #d9dee7;
+  --accent: #0b7f68;
+  --accent-soft: #e3f5ef;
+  --danger: #b42318;
+  --danger-soft: #fff0ee;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--page);
+  color: var(--ink);
+  font-family: "SF Pro Text", "Helvetica Neue", "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.5rem 0.7rem;
+}
+
+.app-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+.dashboard-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.hero-card,
+.section-card,
+.metric-card,
+.error-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.hero-card {
+  padding: 1.25rem;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+}
+
+.eyebrow,
+.metric-label,
+.section-copy,
+.metric-detail,
+.muted {
+  color: var(--muted);
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.hero-title {
+  margin: 0.35rem 0 0;
+  font-size: 2.35rem;
+  line-height: 1.05;
+}
+
+.hero-copy {
+  max-width: 48rem;
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+}
+
+.status-stack {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: end;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.status-badge-dot {
+  width: 0.52rem;
+  height: 0.52rem;
+  border-radius: 8px;
+  background: currentColor;
+}
+
+.status-badge-live {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.status-badge-offline {
+  background: #f2f3f5;
+  color: var(--muted);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+}
+
+.metric-card,
+.section-card,
+.error-card {
+  padding: 1rem;
+}
+
+.metric-label {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.metric-value {
+  margin: 0.35rem 0 0;
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.metric-detail {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.section-title,
+.error-title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.section-copy,
+.error-copy,
+.empty-state {
+  margin: 0.35rem 0 0;
+}
+
+.error-card {
+  background: var(--danger-soft);
+  border-color: #ffd2cd;
+}
+
+.error-title {
+  color: var(--danger);
+}
+
+.code-panel {
+  margin: 1rem 0 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f6f8fb;
+  padding: 0.85rem;
+  overflow-x: auto;
+}
+
+.table-wrap {
+  margin-top: 1rem;
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  border-top: 1px solid var(--line);
+  padding: 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.issue-stack,
+.token-stack {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.issue-id,
+.mono,
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+.issue-id {
+  font-weight: 800;
+}
+
+.state-badge {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 0.2rem 0.5rem;
+}
+
+.subtle-button {
+  background: #ffffff;
+  color: var(--accent);
+}
+
+.event-text {
+  display: inline-block;
+  max-width: 34rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-stack {
+    justify-items: start;
+  }
+}
