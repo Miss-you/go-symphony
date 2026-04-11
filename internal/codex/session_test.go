@@ -100,7 +100,7 @@ func TestStartSessionValidatesWorkspaceAndBootstrapsThread(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartSession returned error: %v", err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	if session.ThreadID() != "thread-1" {
 		t.Fatalf("ThreadID = %q, want thread-1", session.ThreadID())
@@ -226,7 +226,7 @@ func TestRunTurnReusesSessionAndEmitsProtocolEvents(t *testing.T) {
 		}
 		events = append(events, event)
 	})
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	result, err := session.RunTurn(context.Background(), TurnRequest{
 		Prompt: "do the work",
@@ -310,7 +310,7 @@ func TestRunTurnHandlesApprovalsUserInputAndTools(t *testing.T) {
 		}
 		return ToolResult{Success: true, Result: call.Arguments}, nil
 	}))
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	if _, err := session.RunTurn(context.Background(), TurnRequest{Prompt: "use tools", Title: "MT-345"}); err != nil {
 		t.Fatalf("RunTurn returned error: %v", err)
@@ -393,7 +393,7 @@ func TestTimeoutsAreClassified(t *testing.T) {
 		TurnTimeout:    time.Millisecond,
 		ApprovalPolicy: "never",
 	}, workspacePath, transport, nil)
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	_, err = session.RunTurn(context.Background(), TurnRequest{Prompt: "wait", Title: "MT-456"})
 	if !errors.Is(err, ErrTurnTimeout) {
@@ -411,7 +411,7 @@ func TestProcessTransportDoesNotReadStderrAsProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartProcessTransport returned error: %v", err)
 	}
-	defer transport.Close()
+	defer func() { _ = transport.Close() }()
 
 	line, err := transport.ReadLine(context.Background())
 	if err != nil {
