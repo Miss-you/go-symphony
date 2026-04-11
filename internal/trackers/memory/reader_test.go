@@ -208,6 +208,7 @@ func derefInt(t *testing.T, v *int) int {
 	t.Helper()
 	if v == nil {
 		t.Fatal("got nil int pointer")
+		return 0
 	}
 	return *v
 }
@@ -216,6 +217,7 @@ func derefBool(t *testing.T, v *bool) bool {
 	t.Helper()
 	if v == nil {
 		t.Fatal("got nil bool pointer")
+		return false
 	}
 	return *v
 }
@@ -224,6 +226,7 @@ func derefTime(t *testing.T, v *time.Time) time.Time {
 	t.Helper()
 	if v == nil {
 		t.Fatal("got nil time pointer")
+		return time.Time{}
 	}
 	return *v
 }
