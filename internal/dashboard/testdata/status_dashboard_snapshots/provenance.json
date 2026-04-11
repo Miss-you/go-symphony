@@ -1,0 +1,10 @@
+{
+  "idle.snapshot.txt": {"source": "idle.snapshot.txt"},
+  "idle_with_dashboard_url.snapshot.txt": {"source": "idle_with_dashboard_url.snapshot.txt"},
+  "super_busy.snapshot.txt": {"source": "super_busy.snapshot.txt"},
+  "backoff_queue.snapshot.txt": {"source": "backoff_queue.snapshot.txt"},
+  "credits_unlimited.snapshot.txt": {"source": "credits_unlimited.snapshot.txt"},
+  "snapshot_unavailable.snapshot.txt": {"derived": "Go-specific unavailable view for snapshot failure state"},
+  "orchestrator_snapshot_unavailable.snapshot.txt": {"derived": "Go-specific unavailable view preserving source label"},
+  "offline.snapshot.txt": {"derived": "Minimal offline frame equivalent to Elixir render_offline_status"}
+}

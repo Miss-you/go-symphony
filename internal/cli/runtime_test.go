@@ -221,6 +221,35 @@ func TestTurnCancelledNormalizesAsFailureRetry(t *testing.T) {
 	}
 }
 
+func TestWorkerEmitsHumanizedCodexEvent(t *testing.T) {
+	item := testWorkItem("item-humanized", "MT-H", "In Progress")
+	var got domain.RunEvent
+	manager := &workerManager{emit: func(event domain.RunEvent) {
+		got = event
+	}}
+
+	manager.emitCodexEvent(item, 0, "local", "/tmp/work", codex.Event{
+		Kind:   codex.EventUnknownMessage,
+		Method: "codex/event/exec_command_begin",
+		Payload: map[string]any{
+			"params": map[string]any{
+				"msg": map[string]any{"command": "go test ./..."},
+			},
+		},
+	})
+
+	if got.Message != "go test ./..." {
+		t.Fatalf("event message = %q, want humanized command", got.Message)
+	}
+}
+
+func TestTurnCompletedEventMessageIncludesUsage(t *testing.T) {
+	got := turnCompletedEventMessage(codex.TokenUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15})
+	if got != "turn completed (completed) (in 10, out 5, total 15)" {
+		t.Fatalf("turn completed message = %q", got)
+	}
+}
+
 func TestRenderPromptHandlesDefaultDescriptionConditional(t *testing.T) {
 	template := config.EffectivePromptTemplate(config.Workflow{})
 	withDescription := renderPrompt(template, testWorkItem("item-5", "MT-5", "In Progress"))

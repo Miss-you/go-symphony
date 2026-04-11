@@ -1,0 +1,3 @@
+\e[H\e[2J\e[1m╭─ SYMPHONY STATUS\e[0m
+\e[31m│ Orchestrator snapshot unavailable\e[0m
+╰─
