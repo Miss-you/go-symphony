@@ -9,6 +9,7 @@ import (
 
 	"github.com/Miss-you/go-symphony/internal/config"
 	"github.com/Miss-you/go-symphony/internal/domain"
+	"github.com/Miss-you/go-symphony/internal/runner"
 )
 
 type clock interface {
@@ -38,6 +39,7 @@ type serviceDeps struct {
 	refreshItems   func(context.Context, []string) ([]domain.WorkItem, error)
 	startRun       func(context.Context, startRunRequest) (startRunResult, error)
 	stopRun        func(context.Context, stopRunRequest) error
+	hostSelection  *runner.HostSelection
 	admitRun       func(preferredHost string) (string, bool)
 }
 
@@ -213,7 +215,7 @@ func (s *schedulerState) revalidateCandidate(ctx context.Context, deps serviceDe
 }
 
 func (s *schedulerState) dispatchItem(ctx context.Context, deps serviceDeps, item domain.WorkItem, attempt int, preferredHost string) bool {
-	host, admitted := admitHost(deps, preferredHost)
+	host, admitted := s.admitHost(deps, preferredHost)
 	if !admitted {
 		return false
 	}
@@ -616,11 +618,36 @@ func (s *schedulerState) snapshot() domain.Snapshot {
 	}
 }
 
-func admitHost(deps serviceDeps, preferred string) (string, bool) {
+func (s *schedulerState) admitHost(deps serviceDeps, preferred string) (string, bool) {
+	if deps.hostSelection != nil {
+		return deps.hostSelection.Select(preferred, s.hostLoads())
+	}
 	if deps.admitRun == nil {
 		return preferred, true
 	}
 	return deps.admitRun(preferred)
+}
+
+func (s *schedulerState) hostLoads() []runner.HostLoad {
+	counts := make(map[string]int)
+	for _, entry := range s.running {
+		host := strings.TrimSpace(entry.WorkerHost)
+		if host == "" {
+			continue
+		}
+		counts[host]++
+	}
+	hosts := make([]string, 0, len(counts))
+	for host := range counts {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+
+	loads := make([]runner.HostLoad, 0, len(hosts))
+	for _, host := range hosts {
+		loads = append(loads, runner.HostLoad{Host: host, Running: counts[host]})
+	}
+	return loads
 }
 
 func sortCandidates(items []domain.WorkItem) []domain.WorkItem {

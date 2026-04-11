@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Miss-you/go-symphony/internal/config"
+	"github.com/Miss-you/go-symphony/internal/runner"
 )
 
 func TestCreateReusesExistingDirectoryWithoutRunningAfterCreate(t *testing.T) {
@@ -345,6 +346,56 @@ func TestRunWithHooksLogsIgnoredAfterRunFailure(t *testing.T) {
 	}
 }
 
+func TestRunnerTransportDelegatesHookCommandsToRunnerExecutor(t *testing.T) {
+	t.Parallel()
+
+	executor := &fakeRunnerExecutor{results: []runner.CommandResult{{Output: "ok", Status: 0}}}
+	transport := runnerTransport{executor: executor, timeout: time.Second}
+
+	result, err := transport.RunCommand(context.Background(), "worker-a", "/tmp/work", "echo hook", 250*time.Millisecond)
+	if err != nil {
+		t.Fatalf("RunCommand returned error: %v", err)
+	}
+	if result.output != "ok" || result.status != 0 {
+		t.Fatalf("result = %+v, want delegated output/status", result)
+	}
+	if len(executor.requests) != 1 {
+		t.Fatalf("executor requests = %d, want 1", len(executor.requests))
+	}
+	request := executor.requests[0]
+	if request.Host != "worker-a" || request.Dir != "/tmp/work" || request.Command != "echo hook" || request.Timeout != 250*time.Millisecond {
+		t.Fatalf("executor request = %+v, want host/dir/command/timeout preserved", request)
+	}
+}
+
+func TestRunnerTransportEnsuresRemoteWorkspaceThroughRunnerExecutor(t *testing.T) {
+	t.Parallel()
+
+	executor := &fakeRunnerExecutor{results: []runner.CommandResult{{Output: "__go_symphony_workspace__:1:/remote/work/MT-1\n", Status: 0}}}
+	transport := runnerTransport{executor: executor, timeout: time.Second}
+
+	path, created, err := transport.EnsureWorkspace(context.Background(), "worker-a", "/remote/work/MT-1")
+	if err != nil {
+		t.Fatalf("EnsureWorkspace returned error: %v", err)
+	}
+	if path != "/remote/work/MT-1" || !created {
+		t.Fatalf("EnsureWorkspace = (%q, %v), want parsed remote path and created=true", path, created)
+	}
+	if len(executor.requests) != 1 {
+		t.Fatalf("executor requests = %d, want 1", len(executor.requests))
+	}
+	request := executor.requests[0]
+	if request.Host != "worker-a" || request.Dir != "" || request.Timeout != time.Second {
+		t.Fatalf("executor request = %+v, want host with lifecycle timeout", request)
+	}
+	if !strings.HasPrefix(request.Command, "set -eu\n") {
+		t.Fatalf("remote lifecycle command = %q, want fail-fast prefix", request.Command)
+	}
+	if strings.Contains(strings.Join([]string{request.Command}, " "), "ssh ") {
+		t.Fatalf("workspace remote lifecycle command contains ssh transport details: %q", request.Command)
+	}
+}
+
 type fakeManagerTransport struct {
 	ensurePath    string
 	ensureCreated bool
@@ -372,6 +423,27 @@ type fakeCommandCall struct {
 type fakeRemoveCall struct {
 	workerHost string
 	path       string
+}
+
+type fakeRunnerExecutor struct {
+	results  []runner.CommandResult
+	errs     []error
+	requests []runner.CommandRequest
+}
+
+func (f *fakeRunnerExecutor) RunCommand(_ context.Context, req runner.CommandRequest) (runner.CommandResult, error) {
+	f.requests = append(f.requests, req)
+	if len(f.results) == 0 {
+		return runner.CommandResult{}, nil
+	}
+	result := f.results[0]
+	f.results = f.results[1:]
+	var err error
+	if len(f.errs) > 0 {
+		err = f.errs[0]
+		f.errs = f.errs[1:]
+	}
+	return result, err
 }
 
 func (f *fakeManagerTransport) EnsureWorkspace(_ context.Context, workerHost, path string) (string, bool, error) {

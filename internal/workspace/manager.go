@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/Miss-you/go-symphony/internal/config"
+	"github.com/Miss-you/go-symphony/internal/runner"
 )
 
 type ErrorKind string
@@ -100,7 +100,10 @@ type transport interface {
 	RemoveWorkspace(ctx context.Context, workerHost, path string) error
 }
 
-type localTransport struct{}
+type runnerTransport struct {
+	executor runner.Executor
+	timeout  time.Duration
+}
 
 type hookPolicy struct {
 	name       string
@@ -109,12 +112,16 @@ type hookPolicy struct {
 }
 
 func NewManager(settings config.Settings) *Manager {
+	hookTimeout := time.Duration(settings.Hooks.TimeoutMS) * time.Millisecond
 	return &Manager{
 		root:        settings.Workspace.Root,
 		hooks:       settings.Hooks,
 		workerHosts: normalizeWorkerHosts(settings.Worker.SSHHosts),
-		transport:   localTransport{},
-		logger:      log.Default(),
+		transport: runnerTransport{
+			executor: runner.NewExecutor(),
+			timeout:  hookTimeout,
+		},
+		logger: log.Default(),
 	}
 }
 
@@ -445,9 +452,20 @@ func (m *Manager) logBestEffortHookError(err error) {
 	m.logger.Printf("workspace hook ignored: %v", err)
 }
 
-func (localTransport) EnsureWorkspace(_ context.Context, workerHost, path string) (string, bool, error) {
+func (t runnerTransport) EnsureWorkspace(ctx context.Context, workerHost, path string) (string, bool, error) {
 	if workerHost != "" {
-		return "", false, errors.New("remote workspace transport not configured")
+		result, err := t.run(ctx, runner.CommandRequest{
+			Host:    workerHost,
+			Command: remoteEnsureWorkspaceCommand(path),
+			Timeout: t.timeout,
+		})
+		if err != nil {
+			return "", false, err
+		}
+		if result.status != 0 {
+			return "", false, fmt.Errorf("remote workspace prepare failed with status %d: %s", result.status, result.output)
+		}
+		return parseRemoteEnsureWorkspaceOutput(result.output)
 	}
 	if info, err := os.Stat(path); err == nil {
 		if info.IsDir() {
@@ -465,35 +483,98 @@ func (localTransport) EnsureWorkspace(_ context.Context, workerHost, path string
 	return path, true, nil
 }
 
-func (localTransport) RunCommand(_ context.Context, workerHost, dir, command string, timeout time.Duration) (commandResult, error) {
-	if workerHost != "" {
-		return commandResult{}, errors.New("remote command transport not configured")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "sh", "-lc", command)
-	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	if ctx.Err() != nil {
-		return commandResult{}, context.DeadlineExceeded
-	}
-	if err == nil {
-		return commandResult{output: string(output), status: 0}, nil
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return commandResult{output: string(output), status: exitErr.ExitCode()}, nil
-	}
-	return commandResult{}, err
+func (t runnerTransport) RunCommand(ctx context.Context, workerHost, dir, command string, timeout time.Duration) (commandResult, error) {
+	return t.run(ctx, runner.CommandRequest{
+		Host:    workerHost,
+		Dir:     dir,
+		Command: command,
+		Timeout: timeout,
+	})
 }
 
-func (localTransport) RemoveWorkspace(_ context.Context, workerHost, path string) error {
+func (t runnerTransport) RemoveWorkspace(ctx context.Context, workerHost, path string) error {
 	if workerHost != "" {
-		return errors.New("remote workspace transport not configured")
+		result, err := t.run(ctx, runner.CommandRequest{
+			Host:    workerHost,
+			Command: "rm -rf -- " + quoteShell(path),
+			Timeout: t.timeout,
+		})
+		if err != nil {
+			return err
+		}
+		if result.status != 0 {
+			return fmt.Errorf("remote workspace remove failed with status %d: %s", result.status, result.output)
+		}
+		return nil
 	}
 	if err := os.RemoveAll(path); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (t runnerTransport) run(ctx context.Context, req runner.CommandRequest) (commandResult, error) {
+	executor := t.executor
+	if executor == nil {
+		executor = runner.NewExecutor()
+	}
+	result, err := executor.RunCommand(ctx, req)
+	if err != nil {
+		return commandResult{}, err
+	}
+	return commandResult{output: result.Output, status: result.Status}, nil
+}
+
+const remoteWorkspaceMarker = "__go_symphony_workspace__:"
+
+func remoteEnsureWorkspaceCommand(path string) string {
+	quotedPath := quoteShell(path)
+	return strings.Join([]string{
+		"set -eu",
+		"workspace=" + quotedPath,
+		"created=0",
+		`if [ -e "$workspace" ] && [ ! -d "$workspace" ]; then rm -rf -- "$workspace"; fi`,
+		`if [ ! -d "$workspace" ]; then mkdir -p -- "$workspace"; created=1; fi`,
+		`cd "$workspace"`,
+		`printf '` + remoteWorkspaceMarker + `%s:%s\n' "$created" "$(pwd -P)"`,
+	}, "\n")
+}
+
+func parseRemoteEnsureWorkspaceOutput(output string) (string, bool, error) {
+	for _, line := range strings.Split(output, "\n") {
+		if !strings.HasPrefix(line, remoteWorkspaceMarker) {
+			continue
+		}
+		payload := strings.TrimPrefix(line, remoteWorkspaceMarker)
+		parts := strings.SplitN(payload, ":", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[1]) == "" {
+			break
+		}
+		switch parts[0] {
+		case "0":
+			return parts[1], false, nil
+		case "1":
+			return parts[1], true, nil
+		}
+		break
+	}
+	return "", false, errors.New("remote workspace marker not found")
+}
+
+func quoteShell(value string) string {
+	if value == "" {
+		return "''"
+	}
+	if strings.IndexFunc(value, unsafeShellRune) == -1 {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+func unsafeShellRune(r rune) bool {
+	return !safeShellRune(r)
+}
+
+func safeShellRune(r rune) bool {
+	return r == '/' || r == '.' || r == '_' || r == '-' || ('0' <= r && r <= '9') || ('A' <= r && r <= 'Z') || ('a' <= r && r <= 'z')
 }
