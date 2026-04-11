@@ -355,8 +355,8 @@ func (s *Session) RunTurn(ctx context.Context, req TurnRequest) (TurnResult, err
 	for {
 		line, err := s.transport.ReadLine(turnCtx)
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(turnCtx.Err(), context.DeadlineExceeded) {
-				return TurnResult{}, fmt.Errorf("%w", ErrTurnTimeout)
+			if scopedErr := scopedTimeoutError(err, ctx, turnCtx, ErrTurnTimeout); scopedErr != nil {
+				return TurnResult{}, scopedErr
 			}
 			return TurnResult{}, err
 		}
@@ -447,8 +447,8 @@ func (s *Session) awaitResponse(ctx context.Context, id any) (map[string]any, er
 	for {
 		line, err := s.transport.ReadLine(readCtx)
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(readCtx.Err(), context.DeadlineExceeded) {
-				return nil, fmt.Errorf("%w", ErrReadTimeout)
+			if scopedErr := scopedTimeoutError(err, ctx, readCtx, ErrReadTimeout); scopedErr != nil {
+				return nil, scopedErr
 			}
 			return nil, err
 		}
@@ -472,6 +472,19 @@ func (s *Session) awaitResponse(ctx context.Context, id any) (map[string]any, er
 	}
 }
 
+func scopedTimeoutError(err error, parent, scoped context.Context, timeoutErr error) error {
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		return nil
+	}
+	if parentErr := parent.Err(); parentErr != nil {
+		return parentErr
+	}
+	if errors.Is(scoped.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("%w", timeoutErr)
+	}
+	return err
+}
+
 func (s *Session) handleApproval(ctx context.Context, payload map[string]any, raw, turnID string) error {
 	if !isNeverApprovalPolicy(s.cfg.ApprovalPolicy) {
 		return ErrApprovalRequired
@@ -489,6 +502,9 @@ func (s *Session) handleApproval(ctx context.Context, payload map[string]any, ra
 }
 
 func (s *Session) handleUserInput(ctx context.Context, payload map[string]any, raw, turnID string) error {
+	if !s.nonInteractive {
+		return ErrApprovalRequired
+	}
 	answers, ok := approvalAnswers(payload)
 	if !ok {
 		answers, ok = unavailableAnswers(payload)

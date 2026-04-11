@@ -355,6 +355,51 @@ func TestRunTurnHandlesApprovalsUserInputAndTools(t *testing.T) {
 	)
 }
 
+func TestRunTurnRequiresNonInteractiveForUserInput(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	workspacePath := filepath.Join(root, "MT-346")
+	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	transport := newScriptedTransport(
+		`{"id":1,"result":{}}`,
+		`{"id":2,"result":{"thread":{"id":"thread-346"}}}`,
+		`{"id":3,"result":{"turn":{"id":"turn-input"}}}`,
+		`{"id":"input-1","method":"item/tool/requestUserInput","params":{"questions":[{"id":"q1"}]}}`,
+	)
+	session, err := StartSession(context.Background(), SessionOptions{
+		Config: Config{
+			Command:        "codex app-server",
+			WorkspaceRoot:  root,
+			ReadTimeout:    time.Second,
+			TurnTimeout:    time.Second,
+			ApprovalPolicy: "never",
+		},
+		WorkspacePath:     workspacePath,
+		TransportFactory:  (&recordingFactory{transport: transport}).Start,
+		ToolHandler:       ToolHandlerFunc(func(context.Context, ToolCall) (ToolResult, error) { return ToolResult{}, ErrUnsupportedTool }),
+		NonInteractive:    false,
+		TurnSandboxPolicy: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("StartSession returned error: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	_, err = session.RunTurn(context.Background(), TurnRequest{Prompt: "ask", Title: "MT-346"})
+	if !errors.Is(err, ErrApprovalRequired) {
+		t.Fatalf("RunTurn error = %v, want ErrApprovalRequired", err)
+	}
+	for _, write := range transport.writes() {
+		if write["id"] == "input-1" {
+			t.Fatalf("unexpected non-interactive response when disabled: %#v", write)
+		}
+	}
+}
+
 func TestTimeoutsAreClassified(t *testing.T) {
 	t.Parallel()
 
@@ -398,6 +443,52 @@ func TestTimeoutsAreClassified(t *testing.T) {
 	_, err = session.RunTurn(context.Background(), TurnRequest{Prompt: "wait", Title: "MT-456"})
 	if !errors.Is(err, ErrTurnTimeout) {
 		t.Fatalf("RunTurn error = %v, want ErrTurnTimeout", err)
+	}
+
+	parentCtx, parentCancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer parentCancel()
+	_, err = StartSession(parentCtx, SessionOptions{
+		Config: Config{
+			Command:        "codex app-server",
+			WorkspaceRoot:  root,
+			ReadTimeout:    time.Second,
+			ApprovalPolicy: "never",
+		},
+		WorkspacePath:     workspacePath,
+		TransportFactory:  (&recordingFactory{transport: newScriptedTransport()}).Start,
+		ToolHandler:       ToolHandlerFunc(func(context.Context, ToolCall) (ToolResult, error) { return ToolResult{}, ErrUnsupportedTool }),
+		NonInteractive:    true,
+		TurnSandboxPolicy: map[string]any{},
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("StartSession error = %v, want parent context deadline", err)
+	}
+	if errors.Is(err, ErrReadTimeout) {
+		t.Fatalf("StartSession error = %v, must not wrap ErrReadTimeout for parent deadline", err)
+	}
+
+	parentTransport := newScriptedTransport(
+		`{"id":1,"result":{}}`,
+		`{"id":2,"result":{"thread":{"id":"thread-parent-timeout"}}}`,
+	)
+	parentSession := startTestSessionWithConfig(t, Config{
+		Command:        "codex app-server",
+		WorkspaceRoot:  root,
+		ReadTimeout:    time.Second,
+		TurnTimeout:    time.Second,
+		ApprovalPolicy: "never",
+	}, workspacePath, parentTransport, nil)
+	defer func() { _ = parentSession.Close() }()
+	parentTransport.lines <- []byte(`{"id":3,"result":{"turn":{"id":"turn-parent-timeout"}}}`)
+
+	turnCtx, turnCancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer turnCancel()
+	_, err = parentSession.RunTurn(turnCtx, TurnRequest{Prompt: "wait", Title: "MT-456"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("RunTurn error = %v, want parent context deadline", err)
+	}
+	if errors.Is(err, ErrTurnTimeout) {
+		t.Fatalf("RunTurn error = %v, must not wrap ErrTurnTimeout for parent deadline", err)
 	}
 }
 
