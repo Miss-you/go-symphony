@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -11,11 +13,13 @@ import (
 	"github.com/Miss-you/go-symphony/internal/codex"
 	"github.com/Miss-you/go-symphony/internal/config"
 	"github.com/Miss-you/go-symphony/internal/domain"
+	"github.com/Miss-you/go-symphony/internal/httpapi"
 	"github.com/Miss-you/go-symphony/internal/observability"
 	"github.com/Miss-you/go-symphony/internal/orchestrator"
 	"github.com/Miss-you/go-symphony/internal/tracker"
 	lineartracker "github.com/Miss-you/go-symphony/internal/trackers/linear"
 	"github.com/Miss-you/go-symphony/internal/trackers/memory"
+	"github.com/Miss-you/go-symphony/internal/web"
 	"github.com/Miss-you/go-symphony/internal/workflow"
 	"github.com/Miss-you/go-symphony/internal/workspace"
 )
@@ -50,6 +54,8 @@ type Runtime struct {
 	ownStore   bool
 	service    *orchestrator.Service
 	workers    *workerManager
+	httpServer *http.Server
+	dashboard  string
 	closeOnce  sync.Once
 	closeError error
 }
@@ -110,6 +116,10 @@ func StartRuntime(ctx context.Context, opts RuntimeOptions) (*Runtime, error) {
 	})
 	workers.emit = svc.ApplyRunEvent
 	runtime.service = svc
+	if err := runtime.startHTTPServer(settings); err != nil {
+		_ = runtime.Close()
+		return nil, err
+	}
 	return runtime, nil
 }
 
@@ -120,12 +130,24 @@ func (r *Runtime) Snapshot() domain.Snapshot {
 	return r.service.Snapshot()
 }
 
+func (r *Runtime) DashboardURL() string {
+	if r == nil {
+		return ""
+	}
+	return r.dashboard
+}
+
 func (r *Runtime) Close() error {
 	if r == nil {
 		return nil
 	}
 	r.closeOnce.Do(func() {
 		var errs []error
+		if r.httpServer != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			errs = append(errs, r.httpServer.Shutdown(shutdownCtx))
+			cancel()
+		}
 		if r.service != nil {
 			errs = append(errs, r.service.Close())
 		}
@@ -138,6 +160,57 @@ func (r *Runtime) Close() error {
 		r.closeError = errors.Join(errs...)
 	})
 	return r.closeError
+}
+
+func (r *Runtime) startHTTPServer(settings config.Settings) error {
+	if settings.Server.Port == nil {
+		return nil
+	}
+	host := strings.TrimSpace(settings.Server.Host)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	listener, err := net.Listen("tcp", net.JoinHostPort(host, fmt.Sprint(*settings.Server.Port)))
+	if err != nil {
+		return err
+	}
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		_ = listener.Close()
+		return err
+	}
+	r.dashboard = "http://" + net.JoinHostPort(host, port) + "/"
+	server := &http.Server{
+		Handler: web.NewHandler(web.Options{
+			Snapshot: func(context.Context) (domain.Snapshot, error) {
+				return r.Snapshot(), nil
+			},
+			Refresh: func(context.Context) (httpapi.RefreshResult, error) {
+				if r.service == nil {
+					return httpapi.RefreshResult{}, httpapi.ErrRefreshUnavailable
+				}
+				result := r.service.RequestRefresh()
+				return httpapi.RefreshResult{Queued: result.Queued, Coalesced: result.Coalesced}, nil
+			},
+			WorkspaceRoot: settings.Workspace.Root,
+			Now:           func() time.Time { return time.Now().UTC() },
+			MaxAgents:     settings.Agent.MaxConcurrentAgents,
+			DashboardURL:  r.dashboard,
+			ProjectURL:    runtimeProjectURL(settings),
+		}),
+	}
+	r.httpServer = server
+	go func() {
+		_ = server.Serve(listener)
+	}()
+	return nil
+}
+
+func runtimeProjectURL(settings config.Settings) string {
+	if settings.Provider.Kind != config.ProviderLinear || strings.TrimSpace(settings.Provider.Project) == "" {
+		return ""
+	}
+	return "https://linear.app/project/" + strings.TrimSpace(settings.Provider.Project) + "/issues"
 }
 
 func runtimeStore(opts RuntimeOptions) (*config.Store, bool, error) {

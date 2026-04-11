@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -250,6 +252,39 @@ func TestTurnCompletedEventMessageIncludesUsage(t *testing.T) {
 	}
 }
 
+func TestRuntimeStartsWebServerWhenPortConfigured(t *testing.T) {
+	root := t.TempDir()
+	store := newTestStoreWithServer(t, root, "memory", "", 0)
+	reader := memory.NewReader(nil)
+
+	rt, err := StartRuntime(context.Background(), RuntimeOptions{
+		Store:  store,
+		Reader: reader,
+	})
+	if err != nil {
+		t.Fatalf("StartRuntime returned error: %v", err)
+	}
+	defer func() { _ = rt.Close() }()
+
+	baseURL := strings.TrimRight(rt.DashboardURL(), "/")
+	if baseURL == "" {
+		t.Fatal("DashboardURL is empty, want configured web server")
+	}
+
+	rootBody := httpGet(t, baseURL+"/")
+	if !strings.Contains(rootBody, "Operations Dashboard") {
+		t.Fatalf("root body missing dashboard heading:\n%s", rootBody)
+	}
+	cssBody := httpGet(t, baseURL+"/dashboard.css")
+	if !strings.Contains(cssBody, ".dashboard-shell") {
+		t.Fatalf("css body missing dashboard shell rule")
+	}
+	stateBody := httpGet(t, baseURL+"/api/v1/state")
+	if !strings.Contains(stateBody, `"running":0`) {
+		t.Fatalf("state body = %s, want delegated API payload", stateBody)
+	}
+}
+
 func TestRenderPromptHandlesDefaultDescriptionConditional(t *testing.T) {
 	template := config.EffectivePromptTemplate(config.Workflow{})
 	withDescription := renderPrompt(template, testWorkItem("item-5", "MT-5", "In Progress"))
@@ -326,6 +361,31 @@ func newTestStoreWithMaxTurns(t *testing.T, root, provider, providerExtra string
 	return store
 }
 
+func newTestStoreWithServer(t *testing.T, root, provider, providerExtra string, port int) *config.Store {
+	t.Helper()
+	workflowPath := filepath.Join(root, "WORKFLOW.md")
+	content := testWorkflowContent(root, provider, providerExtra, 1, "Work on {{ issue.identifier }}: {{ issue.title }}")
+	content = strings.Replace(content, `observability:
+  refresh_ms: 1000
+  render_interval_ms: 16
+`, fmt.Sprintf(`observability:
+  refresh_ms: 1000
+  render_interval_ms: 16
+server:
+  host: 127.0.0.1
+  port: %d
+`, port), 1)
+	if err := os.WriteFile(workflowPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	store, err := config.NewStore(config.WithWorkflowPath(workflowPath))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	return store
+}
+
 func newTestStoreWithPrompt(t *testing.T, root, provider, providerExtra string, maxTurns int, prompt string) (*config.Store, string) {
 	t.Helper()
 	workflowPath := filepath.Join(root, "WORKFLOW.md")
@@ -390,6 +450,24 @@ func waitFor(t *testing.T, timeout time.Duration, condition func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("condition not met before timeout")
+}
+
+func httpGet(t *testing.T, url string) string {
+	t.Helper()
+	client := &http.Client{Timeout: time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read %s: %v", url, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s status = %d body=%s", url, resp.StatusCode, body)
+	}
+	return string(body)
 }
 
 type runtimeTransportFactory struct {
