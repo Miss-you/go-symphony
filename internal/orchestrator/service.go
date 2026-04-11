@@ -7,6 +7,7 @@ import (
 
 	"github.com/Miss-you/go-symphony/internal/config"
 	"github.com/Miss-you/go-symphony/internal/domain"
+	"github.com/Miss-you/go-symphony/internal/runner"
 )
 
 type service struct {
@@ -31,6 +32,12 @@ type scheduledRetry struct {
 func newService(settings config.Settings, deps serviceDeps, clk clock, timers timerFactory, transitionDelay time.Duration) *service {
 	if timers == nil {
 		timers = realTimerFactory{}
+	}
+	if deps.hostSelection == nil && deps.admitRun == nil {
+		deps.hostSelection = &runner.HostSelection{
+			Hosts:      settings.Worker.SSHHosts,
+			MaxPerHost: settings.Worker.MaxConcurrentAgentsPerHost,
+		}
 	}
 	svc := &service{
 		state:               newSchedulerState(settings, clk),

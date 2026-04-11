@@ -9,6 +9,7 @@ import (
 
 	"github.com/Miss-you/go-symphony/internal/config"
 	"github.com/Miss-you/go-symphony/internal/domain"
+	"github.com/Miss-you/go-symphony/internal/runner"
 )
 
 func TestServiceStartupPollShowsCheckingAndResetsAfterCycle(t *testing.T) {
@@ -198,6 +199,83 @@ func TestDispatchAdmitsHostOncePerDispatch(t *testing.T) {
 
 	if admitCalls != 1 {
 		t.Fatalf("admitRun calls = %d, want 1 per dispatch", admitCalls)
+	}
+}
+
+func TestHostLoadsDerivedFromRunningEntries(t *testing.T) {
+	state := newSchedulerState(testSettings(), newFakeClock(time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC)))
+	state.running["a1"] = runningEntry{Item: testItem("a1", "MT-1", "In Progress", nil, state.clock.Now()), WorkerHost: "worker-a"}
+	state.running["a2"] = runningEntry{Item: testItem("a2", "MT-2", "In Progress", nil, state.clock.Now()), WorkerHost: "worker-a"}
+	state.running["b1"] = runningEntry{Item: testItem("b1", "MT-3", "In Progress", nil, state.clock.Now()), WorkerHost: "worker-b"}
+	state.running["local"] = runningEntry{Item: testItem("local", "MT-4", "In Progress", nil, state.clock.Now()), WorkerHost: ""}
+
+	got := state.hostLoads()
+	want := []runner.HostLoad{{Host: "worker-a", Running: 2}, {Host: "worker-b", Running: 1}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("host loads = %+v, want %+v", got, want)
+	}
+}
+
+func TestDispatchUsesRunnerHostSelection(t *testing.T) {
+	state := newSchedulerState(testSettings(), newFakeClock(time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC)))
+	state.running["busy"] = runningEntry{Item: testItem("busy", "MT-BUSY", "In Progress", nil, state.clock.Now()), WorkerHost: "worker-a"}
+	item := testItem("first", "MT-1", "In Progress", nil, state.clock.Now())
+	capOne := 1
+
+	var started []startRunRequest
+	deps := serviceDeps{
+		hostSelection: &runner.HostSelection{Hosts: []string{"worker-a", "worker-b"}, MaxPerHost: &capOne},
+		startRun: func(_ context.Context, req startRunRequest) (startRunResult, error) {
+			started = append(started, req)
+			return startRunResult{Handle: req.Item.ID, WorkerHost: req.PreferredHost}, nil
+		},
+	}
+
+	if !state.dispatchItem(context.Background(), deps, item, 0, "") {
+		t.Fatal("dispatchItem returned false, want worker-b admission")
+	}
+	if len(started) != 1 {
+		t.Fatalf("start calls = %d, want 1", len(started))
+	}
+	if started[0].PreferredHost != "worker-b" {
+		t.Fatalf("start preferred host = %q, want worker-b", started[0].PreferredHost)
+	}
+	if state.running[item.ID].WorkerHost != "worker-b" {
+		t.Fatalf("running host = %q, want worker-b", state.running[item.ID].WorkerHost)
+	}
+}
+
+func TestNewServiceDefaultsToRunnerHostSelectionFromSettings(t *testing.T) {
+	clock := newFakeClock(time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC))
+	timers := newFakeTimerFactory(clock)
+	settings := testSettings()
+	capOne := 1
+	settings.Worker = config.WorkerSettings{
+		SSHHosts:                   []string{"worker-a", "worker-b"},
+		MaxConcurrentAgentsPerHost: &capOne,
+	}
+
+	var started []startRunRequest
+	svc := newService(settings, serviceDeps{
+		startRun: func(_ context.Context, req startRunRequest) (startRunResult, error) {
+			started = append(started, req)
+			return startRunResult{Handle: req.Item.ID, WorkerHost: req.PreferredHost}, nil
+		},
+	}, clock, timers, 20*time.Millisecond)
+	t.Cleanup(svc.close)
+
+	svc.state.running["busy"] = runningEntry{
+		Item:       testItem("busy", "MT-BUSY", "In Progress", nil, clock.Now()),
+		StartedAt:  clock.Now(),
+		WorkerHost: "worker-a",
+	}
+	item := testItem("first", "MT-1", "In Progress", nil, clock.Now())
+
+	if !svc.state.dispatchItem(context.Background(), svc.deps, item, 0, "") {
+		t.Fatal("dispatchItem returned false, want worker-b admission from service settings")
+	}
+	if len(started) != 1 || started[0].PreferredHost != "worker-b" {
+		t.Fatalf("started = %+v, want runner host selection to choose worker-b", started)
 	}
 }
 

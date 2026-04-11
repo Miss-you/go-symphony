@@ -1,2 +1,2 @@
-// Package runner will hold local and SSH execution boundaries.
+// Package runner owns local and SSH execution-host boundaries.
 package runner
