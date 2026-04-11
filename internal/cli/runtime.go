@@ -11,6 +11,7 @@ import (
 	"github.com/Miss-you/go-symphony/internal/codex"
 	"github.com/Miss-you/go-symphony/internal/config"
 	"github.com/Miss-you/go-symphony/internal/domain"
+	"github.com/Miss-you/go-symphony/internal/observability"
 	"github.com/Miss-you/go-symphony/internal/orchestrator"
 	"github.com/Miss-you/go-symphony/internal/tracker"
 	lineartracker "github.com/Miss-you/go-symphony/internal/trackers/linear"
@@ -433,6 +434,7 @@ func (m *workerManager) runCodexLoop(ctx context.Context, handle *runHandle, ite
 				WorkerHost:     workerHost,
 				WorkspacePath:  workspacePath,
 				SessionID:      session.ThreadID(),
+				Message:        turnCompletedEventMessage(result.Usage),
 				CodexTotals: domain.CodexTotals{
 					InputTokens:  result.Usage.InputTokens,
 					OutputTokens: result.Usage.OutputTokens,
@@ -494,9 +496,12 @@ func (m *workerManager) emitFailure(item domain.WorkItem, attempt int, workerHos
 }
 
 func (m *workerManager) emitCodexEvent(item domain.WorkItem, attempt int, workerHost, workspacePath string, event codex.Event) {
-	message := string(event.Kind)
-	if event.Method != "" {
-		message += ":" + event.Method
+	message := observability.SummarizeCodexEvent(event)
+	if message == "" {
+		message = string(event.Kind)
+		if event.Method != "" {
+			message += ":" + event.Method
+		}
 	}
 	sessionID := event.SessionID
 	if sessionID == "" {
@@ -519,6 +524,23 @@ func (m *workerManager) emitEvent(event domain.RunEvent) {
 	if m.emit != nil {
 		m.emit(event)
 	}
+}
+
+func turnCompletedEventMessage(usage codex.TokenUsage) string {
+	payload := map[string]any{
+		"params": map[string]any{
+			"usage": map[string]any{
+				"input_tokens":  usage.InputTokens,
+				"output_tokens": usage.OutputTokens,
+				"total_tokens":  usage.TotalTokens,
+			},
+		},
+	}
+	return observability.SummarizeCodexEvent(codex.Event{
+		Kind:    codex.EventTurnCompleted,
+		Method:  "turn/completed",
+		Payload: payload,
+	})
 }
 
 type runHandle struct {
