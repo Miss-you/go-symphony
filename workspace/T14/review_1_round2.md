@@ -17,12 +17,12 @@ None.
 
 ## Medium / Low Issues
 
-1. **Event normalization is close, but `turn_failed` / `turn_cancelled` could be stated one notch more explicitly.**  
-   The matrix now covers the important runtime buckets, including successful turn completion, malformed payloads, unsupported tools, and the normal run-completed path ([`workspace/T14/final_impl_v1.md:173-197`](/Users/apple/Documents/Github/go-symphony/.worktrees/t14-end-to-end-run-integration/workspace/T14/final_impl_v1.md#L173-L197)).  
+1. **Event normalization is close, but `turn_failed` / `turn_cancelled` could be stated one notch more explicitly.**
+   The matrix now covers the important runtime buckets, including successful turn completion, malformed payloads, unsupported tools, and the normal run-completed path ([`workspace/T14/final_impl_v1.md:173-197`](/Users/apple/Documents/Github/go-symphony/.worktrees/t14-end-to-end-run-integration/workspace/T14/final_impl_v1.md#L173-L197)).
    The remaining ambiguity is whether `codex.EventTurnFailed` and `codex.EventTurnCancelled` are surfaced only as `RunEventRunFailed`, or also preserved as `RunEventCodexEventReceived` facts before that. This is not a blocker, but it is the last place where the event adapter still needs a bit of implementation latitude.
 
-2. **Hot reload is preserved in the prose, but not yet pinned by a dedicated integration regression.**  
-   `internal/cli` now explicitly owns `config.Store` lifecycle and last-known-good reload behavior ([`workspace/T14/final_impl_v1.md:65-74`](/Users/apple/Documents/Github/go-symphony/.worktrees/t14-end-to-end-run-integration/workspace/T14/final_impl_v1.md#L65-L74), [`workspace/T14/final_impl_v1.md:96-110`](/Users/apple/Documents/Github/go-symphony/.worktrees/t14-end-to-end-run-integration/workspace/T14/final_impl_v1.md#L96-L110)), which addresses the earlier stance gap.  
+2. **Hot reload is preserved in the prose, but not yet pinned by a dedicated integration regression.**
+   `internal/cli` now explicitly owns `config.Store` lifecycle and last-known-good reload behavior ([`workspace/T14/final_impl_v1.md:65-74`](/Users/apple/Documents/Github/go-symphony/.worktrees/t14-end-to-end-run-integration/workspace/T14/final_impl_v1.md#L65-L74), [`workspace/T14/final_impl_v1.md:96-110`](/Users/apple/Documents/Github/go-symphony/.worktrees/t14-end-to-end-run-integration/workspace/T14/final_impl_v1.md#L96-L110)), which addresses the earlier stance gap.
    The remaining gap is test shape: T14 still does not call out a regression that proves the bootstrap reads the current snapshot before worker creation after a reload. That is a coverage gap, not a design error.
 
 ## Required Changes

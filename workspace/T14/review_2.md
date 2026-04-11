@@ -14,18 +14,18 @@
 
 ## High-Severity Issues
 
-1. **Max-turn handling is underspecified and can leak run state.**  
+1. **Max-turn handling is underspecified and can leak run state.**
    In [workspace/T14/final_impl_v1.md](file:///Users/apple/Documents/Github/go-symphony/.worktrees/t14-end-to-end-run-integration/workspace/T14/final_impl_v1.md#L117), the plan says the runner should continue until the refreshed item is inactive or `agent.max_turns` is reached, but it never says what happens at the cap. The design requires the loop to keep refreshing after turns and only continue while the item is still active; once the cap is hit, the plan needs to say whether the worker exits as a normal completion, a retry, or a terminal stop, and whether the orchestrator releases the claim or leaves it queued. Without that, a complete run can terminate without a defined state transition or cleanup path.
 
-2. **Event normalization is too vague to prove or implement safely.**  
+2. **Event normalization is too vague to prove or implement safely.**
    In [workspace/T14/final_impl_v1.md](file:///Users/apple/Documents/Github/go-symphony/.worktrees/t14-end-to-end-run-integration/workspace/T14/final_impl_v1.md#L118-L133), the plan only names a few coarse event buckets. The design explicitly puts event normalization in `codex` and the runtime vocabulary in `domain.RunEvent`; T14 needs a complete, testable mapping for session start, turn completion/failure/cancel, approval handling, tool calls, unsupported tools, malformed payloads, and how totals/rate limits are projected. As written, the plan leaves the most important observability and retry signals ambiguous, which makes the end-to-end behavior untestable.
 
 ## Medium / Low Issues
 
-1. **The test strategy does not explicitly prove the post-turn refresh-by-ID checkpoint.**  
+1. **The test strategy does not explicitly prove the post-turn refresh-by-ID checkpoint.**
    The plan mentions continuation after a refreshed item stays active, but it does not require a test that proves refresh happens after each completed turn before redispatch. That check is central to avoiding stale continuation loops.
 
-2. **The verification plan is broad, but it does not call out direct assertions for the runtime event vocabulary.**  
+2. **The verification plan is broad, but it does not call out direct assertions for the runtime event vocabulary.**
    The package sweep can pass while the worker still drops or mislabels `domain.RunEvent` kinds. T14 should include a focused regression that asserts the normalized event stream, not just a successful turn transcript.
 
 ## Required Changes Before Acceptance
