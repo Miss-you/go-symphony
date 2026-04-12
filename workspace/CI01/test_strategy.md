@@ -8,7 +8,7 @@ Prove that the existing GitHub Actions CI workflow is structurally valid and inv
 
 | Behavior | Verification | What It Proves |
 | --- | --- | --- |
-| Workflow YAML is parseable | Local YAML parse of `.github/workflows/ci.yml` | The workflow file is syntactically valid YAML and can be consumed by GitHub Actions. |
+| Workflow YAML is parseable | Local YAML parse of `.github/workflows/ci.yml` | The workflow file is syntactically valid YAML. |
 | Build job command is healthy | `make build` | The CI build command compiles the repository through the canonical build target. |
 | Lint job contract is healthy | `make lint` | The local lint target invoked by project verification is runnable with the current toolchain. |
 | Unit job command is healthy | `make test-unit` | The CI unit command executes the short Go test suite. |
