@@ -25,13 +25,14 @@ import (
 )
 
 type RuntimeOptions struct {
-	WorkflowPath     string
-	Store            *config.Store
-	Reader           tracker.TrackerReader
-	Workspace        WorkspaceController
-	TransportFactory codex.TransportFactory
-	BundleFactory    BundleFactory
-	MemoryItems      []domain.WorkItem
+	WorkflowPath       string
+	Store              *config.Store
+	Reader             tracker.TrackerReader
+	Workspace          WorkspaceController
+	TransportFactory   codex.TransportFactory
+	BundleFactory      BundleFactory
+	MemoryItems        []domain.WorkItem
+	ServerPortOverride *int
 }
 
 type BundleFactory func(config.Workflow, config.Settings) (RuntimeBundle, error)
@@ -52,6 +53,7 @@ type WorkspaceController interface {
 type Runtime struct {
 	store      *config.Store
 	ownStore   bool
+	settings   config.Settings
 	service    *orchestrator.Service
 	workers    *workerManager
 	httpServer *http.Server
@@ -74,6 +76,10 @@ func StartRuntime(ctx context.Context, opts RuntimeOptions) (*Runtime, error) {
 			_ = store.Close()
 		}
 		return nil, err
+	}
+	if opts.ServerPortOverride != nil {
+		port := *opts.ServerPortOverride
+		settings.Server.Port = &port
 	}
 	rawWorkflow, err := store.Current()
 	if err != nil {
@@ -106,6 +112,7 @@ func StartRuntime(ctx context.Context, opts RuntimeOptions) (*Runtime, error) {
 	runtime := &Runtime{
 		store:    store,
 		ownStore: ownStore,
+		settings: settings,
 		workers:  workers,
 	}
 	svc := orchestrator.Start(settings, orchestrator.Dependencies{
@@ -135,6 +142,13 @@ func (r *Runtime) DashboardURL() string {
 		return ""
 	}
 	return r.dashboard
+}
+
+func (r *Runtime) Settings() config.Settings {
+	if r == nil {
+		return config.Settings{}
+	}
+	return r.settings
 }
 
 func (r *Runtime) Close() error {
@@ -179,7 +193,7 @@ func (r *Runtime) startHTTPServer(settings config.Settings) error {
 		_ = listener.Close()
 		return err
 	}
-	r.dashboard = "http://" + net.JoinHostPort(host, port) + "/"
+	r.dashboard = "http://" + net.JoinHostPort(dashboardDisplayHost(host), port) + "/"
 	server := &http.Server{
 		Handler: web.NewHandler(web.Options{
 			Snapshot: func(context.Context) (domain.Snapshot, error) {
@@ -204,6 +218,18 @@ func (r *Runtime) startHTTPServer(settings config.Settings) error {
 		_ = server.Serve(listener)
 	}()
 	return nil
+}
+
+func dashboardDisplayHost(host string) string {
+	trimmed := strings.TrimSpace(host)
+	switch trimmed {
+	case "", "0.0.0.0", "::", "[::]":
+		return "127.0.0.1"
+	}
+	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		return strings.TrimSuffix(strings.TrimPrefix(trimmed, "["), "]")
+	}
+	return trimmed
 }
 
 func runtimeProjectURL(settings config.Settings) string {
