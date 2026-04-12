@@ -285,6 +285,46 @@ func TestRuntimeStartsWebServerWhenPortConfigured(t *testing.T) {
 	}
 }
 
+func TestRuntimeServerPortOverrideTakesPrecedenceAndFormatsDashboardURL(t *testing.T) {
+	root := t.TempDir()
+	store := newTestStoreWithServerHost(t, root, "memory", "", 34567, "0.0.0.0")
+	reader := memory.NewReader(nil)
+	override := 0
+
+	rt, err := StartRuntime(context.Background(), RuntimeOptions{
+		Store:              store,
+		Reader:             reader,
+		ServerPortOverride: &override,
+	})
+	if err != nil {
+		t.Fatalf("StartRuntime returned error: %v", err)
+	}
+	defer func() { _ = rt.Close() }()
+
+	baseURL := strings.TrimRight(rt.DashboardURL(), "/")
+	if baseURL == "" {
+		t.Fatal("DashboardURL is empty, want CLI override web server")
+	}
+	if strings.Contains(baseURL, "0.0.0.0") {
+		t.Fatalf("DashboardURL = %q, want loopback display host", baseURL)
+	}
+	if strings.Contains(baseURL, ":34567") {
+		t.Fatalf("DashboardURL = %q, want live ephemeral port instead of workflow port", baseURL)
+	}
+	if !strings.HasPrefix(baseURL, "http://127.0.0.1:") {
+		t.Fatalf("DashboardURL = %q, want loopback URL", baseURL)
+	}
+
+	rootBody := httpGet(t, baseURL+"/")
+	if !strings.Contains(rootBody, "Operations Dashboard") {
+		t.Fatalf("root body missing dashboard heading:\n%s", rootBody)
+	}
+	stateBody := httpGet(t, baseURL+"/api/v1/state")
+	if !strings.Contains(stateBody, `"running":0`) {
+		t.Fatalf("state body = %s, want delegated API payload", stateBody)
+	}
+}
+
 func TestRenderPromptHandlesDefaultDescriptionConditional(t *testing.T) {
 	template := config.EffectivePromptTemplate(config.Workflow{})
 	withDescription := renderPrompt(template, testWorkItem("item-5", "MT-5", "In Progress"))
@@ -362,6 +402,10 @@ func newTestStoreWithMaxTurns(t *testing.T, root, provider, providerExtra string
 }
 
 func newTestStoreWithServer(t *testing.T, root, provider, providerExtra string, port int) *config.Store {
+	return newTestStoreWithServerHost(t, root, provider, providerExtra, port, "127.0.0.1")
+}
+
+func newTestStoreWithServerHost(t *testing.T, root, provider, providerExtra string, port int, host string) *config.Store {
 	t.Helper()
 	workflowPath := filepath.Join(root, "WORKFLOW.md")
 	content := testWorkflowContent(root, provider, providerExtra, 1, "Work on {{ issue.identifier }}: {{ issue.title }}")
@@ -372,9 +416,9 @@ func newTestStoreWithServer(t *testing.T, root, provider, providerExtra string, 
   refresh_ms: 1000
   render_interval_ms: 16
 server:
-  host: 127.0.0.1
+  host: %s
   port: %d
-`, port), 1)
+`, host, port), 1)
 	if err := os.WriteFile(workflowPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
