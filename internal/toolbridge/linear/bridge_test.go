@@ -264,6 +264,9 @@ func TestLinearWriteHelpers(t *testing.T) {
 		if !strings.Contains(client.calls[0].query, "commentCreate") {
 			t.Fatalf("query = %q, want commentCreate mutation", client.calls[0].query)
 		}
+		if !strings.Contains(client.calls[0].query, "$issueId: String!") {
+			t.Fatalf("query = %q, want Linear String issueId variable", client.calls[0].query)
+		}
 		assertVariable(t, client.calls[0].variables, "issueId", "issue-1")
 		assertVariable(t, client.calls[0].variables, "body", "body")
 
@@ -290,9 +293,15 @@ func TestLinearWriteHelpers(t *testing.T) {
 		if !strings.Contains(client.calls[0].query, "SymphonyResolveStateId") {
 			t.Fatalf("first query = %q, want state lookup", client.calls[0].query)
 		}
+		if !strings.Contains(client.calls[0].query, "$issueId: String!") {
+			t.Fatalf("first query = %q, want Linear String issueId variable", client.calls[0].query)
+		}
 		assertVariable(t, client.calls[0].variables, "stateName", "Done")
 		if !strings.Contains(client.calls[1].query, "issueUpdate") {
 			t.Fatalf("second query = %q, want issueUpdate", client.calls[1].query)
+		}
+		if !strings.Contains(client.calls[1].query, "$issueId: String!") || !strings.Contains(client.calls[1].query, "$stateId: String!") {
+			t.Fatalf("second query = %q, want Linear String issueId/stateId variables", client.calls[1].query)
 		}
 		assertVariable(t, client.calls[1].variables, "stateId", "state-1")
 
