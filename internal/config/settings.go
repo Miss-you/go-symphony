@@ -177,7 +177,7 @@ func ParseSettings(workflow Workflow) (Settings, error) {
 			Kind:           ProviderKind(strings.TrimSpace(legacy.Tracker.Kind)),
 			Endpoint:       strings.TrimSpace(legacy.Tracker.Endpoint),
 			APIKey:         resolveSecretSetting(legacy.Tracker.APIKey, "LINEAR_API_KEY"),
-			Project:        strings.TrimSpace(legacy.Tracker.ProjectSlug),
+			Project:        resolveEnvReferenceSetting(legacy.Tracker.ProjectSlug),
 			Assignee:       resolveSecretSetting(legacy.Tracker.Assignee, "LINEAR_ASSIGNEE"),
 			ActiveStates:   append([]string(nil), legacy.Tracker.ActiveStates...),
 			TerminalStates: append([]string(nil), legacy.Tracker.TerminalStates...),
@@ -425,6 +425,18 @@ func resolveSecretSetting(value, fallbackEnvVar string) string {
 	}
 
 	return normalizeSecretValue(value)
+}
+
+func resolveEnvReferenceSetting(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if envName, ok := envReferenceName(trimmed); ok {
+		envValue, exists := os.LookupEnv(envName)
+		if !exists {
+			return ""
+		}
+		return strings.TrimSpace(envValue)
+	}
+	return trimmed
 }
 
 func resolveWorkspaceRoot(value string) string {

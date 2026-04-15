@@ -67,6 +67,7 @@ Prompt body
 func TestParseSettingsResolvesEnvFallbacksAndWorkspaceRoot(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "env-token")
 	t.Setenv("LINEAR_ASSIGNEE", "dev@example.com")
+	t.Setenv("LINEAR_PROJECT_SLUG", "env-project")
 	wantRoot := filepath.Join(t.TempDir(), "workspace-from-env")
 	t.Setenv("WORKSPACE_ROOT_TOKEN", wantRoot)
 
@@ -74,7 +75,7 @@ func TestParseSettingsResolvesEnvFallbacksAndWorkspaceRoot(t *testing.T) {
 		Config: map[string]any{
 			"tracker": map[string]any{
 				"kind":         "linear",
-				"project_slug": "project",
+				"project_slug": "$LINEAR_PROJECT_SLUG",
 			},
 			"workspace": map[string]any{
 				"root": "$WORKSPACE_ROOT_TOKEN",
@@ -92,6 +93,9 @@ func TestParseSettingsResolvesEnvFallbacksAndWorkspaceRoot(t *testing.T) {
 	}
 	if got.Provider.Assignee != "dev@example.com" {
 		t.Fatalf("assignee mismatch: got %q want %q", got.Provider.Assignee, "dev@example.com")
+	}
+	if got.Provider.Project != "env-project" {
+		t.Fatalf("project mismatch: got %q want %q", got.Provider.Project, "env-project")
 	}
 	if got.Workspace.Root != wantRoot {
 		t.Fatalf("workspace root mismatch: got %q want %q", got.Workspace.Root, wantRoot)
@@ -177,7 +181,7 @@ func TestParseSettingsRejectsInvalidProviderConfig(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		config    map[string]any
+		config   map[string]any
 		wantText string
 	}{
 		{

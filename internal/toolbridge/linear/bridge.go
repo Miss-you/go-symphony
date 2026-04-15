@@ -396,21 +396,21 @@ func cloneMap(in map[string]any) map[string]any {
 }
 
 const createCommentMutation = `
-mutation SymphonyCreateComment($issueId: ID!, $body: String!) {
+mutation SymphonyCreateComment($issueId: String!, $body: String!) {
   commentCreate(input: {issueId: $issueId, body: $body}) {
     success
   }
 }`
 
 const updateStateMutation = `
-mutation SymphonyUpdateIssueState($issueId: ID!, $stateId: ID!) {
+mutation SymphonyUpdateIssueState($issueId: String!, $stateId: String!) {
   issueUpdate(id: $issueId, input: {stateId: $stateId}) {
     success
   }
 }`
 
 const stateLookupQuery = `
-query SymphonyResolveStateId($issueId: ID!, $stateName: String!) {
+query SymphonyResolveStateId($issueId: String!, $stateName: String!) {
   issue(id: $issueId) {
     team {
       states(filter: {name: {eq: $stateName}}, first: 1) {
