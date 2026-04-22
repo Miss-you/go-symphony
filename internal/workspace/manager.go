@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -141,13 +142,16 @@ func (m *Manager) Create(identifier, workerHost string) (CreateResult, error) {
 	}
 	resolvedPath, created, err := m.transport.EnsureWorkspace(context.Background(), workerHost, workspacePath)
 	if err != nil {
+		slog.Error("workspace ensure failed", "identifier", identifier, "path", workspacePath, "error", err)
 		return CreateResult{}, &Error{Kind: ErrWorkspacePrepareFailed, Path: workspacePath, WorkerHost: workerHost, Err: err}
 	}
 	if created {
+		slog.Info("workspace created", "identifier", identifier, "path", resolvedPath)
 		if err := m.runHook(resolvedPath, workerHost, hookPolicy{
 			name:    "after_create",
 			command: m.hooks.AfterCreate,
 		}); err != nil {
+			slog.Error("after_create hook failed", "identifier", identifier, "path", resolvedPath, "error", err)
 			return CreateResult{}, err
 		}
 	}
@@ -175,7 +179,7 @@ func (m *Manager) RunWithHooks(workspacePath, _ string, workerHost string, run f
 	return run()
 }
 
-func (m *Manager) Remove(workspacePath, _ string, workerHost string) error {
+func (m *Manager) Remove(workspacePath, identifier string, workerHost string) error {
 	if workerHost == "" {
 		validatedPath, err := validateLocalPath(m.root, workspacePath)
 		if err != nil {
@@ -196,8 +200,10 @@ func (m *Manager) Remove(workspacePath, _ string, workerHost string) error {
 			return &Error{Kind: ErrWorkspaceRemoveFailed, Path: workspacePath, Err: err}
 		}
 		if err := m.transport.RemoveWorkspace(context.Background(), workerHost, workspacePath); err != nil {
+			slog.Error("workspace remove failed", "path", workspacePath, "error", err)
 			return &Error{Kind: ErrWorkspaceRemoveFailed, Path: workspacePath, Err: err}
 		}
+		slog.Info("workspace removed", "identifier", identifier, "path", workspacePath)
 		return nil
 	}
 
@@ -212,8 +218,10 @@ func (m *Manager) Remove(workspacePath, _ string, workerHost string) error {
 		bestEffort: true,
 	})
 	if err := m.transport.RemoveWorkspace(context.Background(), workerHost, workspacePath); err != nil {
+		slog.Error("workspace remove failed", "path", workspacePath, "worker_host", workerHost, "error", err)
 		return &Error{Kind: ErrWorkspaceRemoveFailed, Path: workspacePath, WorkerHost: workerHost, Err: err}
 	}
+	slog.Info("workspace removed", "identifier", identifier, "path", workspacePath, "worker_host", workerHost)
 	return nil
 }
 

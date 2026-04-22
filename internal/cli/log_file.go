@@ -2,9 +2,12 @@ package cli
 
 import (
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/Miss-you/go-symphony/internal/logging"
 )
 
 var logFileMu sync.Mutex
@@ -23,25 +26,31 @@ func configureLogFile(root string) (func() error, string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, path, err
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return nil, path, err
-	}
 
 	logFileMu.Lock()
+	previousLogger := slog.Default()
 	previousWriter := log.Writer()
 	previousFlags := log.Flags()
 	previousPrefix := log.Prefix()
-	log.SetOutput(file)
+
+	logger, lw, err := logging.New(logging.DefaultConfig(path))
+	if err != nil {
+		logFileMu.Unlock()
+		return nil, path, err
+	}
+
+	slog.SetDefault(logger)
+	log.SetOutput(lw)
 
 	var once sync.Once
 	restore := func() error {
 		var closeErr error
 		once.Do(func() {
+			slog.SetDefault(previousLogger)
 			log.SetOutput(previousWriter)
 			log.SetFlags(previousFlags)
 			log.SetPrefix(previousPrefix)
-			closeErr = file.Close()
+			closeErr = lw.Close()
 			logFileMu.Unlock()
 		})
 		return closeErr

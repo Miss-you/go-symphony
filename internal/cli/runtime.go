@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -127,6 +128,13 @@ func StartRuntime(ctx context.Context, opts RuntimeOptions) (*Runtime, error) {
 		_ = runtime.Close()
 		return nil, err
 	}
+	slog.Info("symphony runtime started",
+		"provider", settings.Provider.Kind,
+		"project", settings.Provider.Project,
+		"workspace_root", settings.Workspace.Root,
+		"max_concurrent_agents", settings.Agent.MaxConcurrentAgents,
+		"dashboard", runtime.dashboard,
+	)
 	return runtime, nil
 }
 
@@ -156,22 +164,40 @@ func (r *Runtime) Close() error {
 		return nil
 	}
 	r.closeOnce.Do(func() {
+		slog.Info("symphony runtime shutting down")
 		var errs []error
 		if r.httpServer != nil {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-			errs = append(errs, r.httpServer.Shutdown(shutdownCtx))
+			if err := r.httpServer.Shutdown(shutdownCtx); err != nil {
+				errs = append(errs, err)
+				slog.Error("http server shutdown error", "error", err)
+			}
 			cancel()
 		}
 		if r.service != nil {
-			errs = append(errs, r.service.Close())
+			if err := r.service.Close(); err != nil {
+				errs = append(errs, err)
+				slog.Error("orchestrator close error", "error", err)
+			}
 		}
 		if r.workers != nil {
-			errs = append(errs, r.workers.Close())
+			if err := r.workers.Close(); err != nil {
+				errs = append(errs, err)
+				slog.Error("worker manager close error", "error", err)
+			}
 		}
 		if r.ownStore && r.store != nil {
-			errs = append(errs, r.store.Close())
+			if err := r.store.Close(); err != nil {
+				errs = append(errs, err)
+				slog.Error("store close error", "error", err)
+			}
 		}
 		r.closeError = errors.Join(errs...)
+		if r.closeError != nil {
+			slog.Error("symphony runtime shutdown completed with errors", "error", r.closeError)
+		} else {
+			slog.Info("symphony runtime shutdown completed")
+		}
 	})
 	return r.closeError
 }
@@ -215,7 +241,9 @@ func (r *Runtime) startHTTPServer(settings config.Settings) error {
 	}
 	r.httpServer = server
 	go func() {
-		_ = server.Serve(listener)
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("http server error", "error", err)
+		}
 	}()
 	return nil
 }

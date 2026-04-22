@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,5 +15,7 @@ var run = cli.Main
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	os.Exit(run(ctx, os.Args[1:]))
+	code := run(ctx, os.Args[1:])
+	slog.Info("symphony exiting", "code", code)
+	os.Exit(code)
 }
