@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -122,7 +123,10 @@ func (s *service) handlePollCycle(nonce uint64) {
 	s.state.reconcileStalled(context.Background(), s.deps)
 	s.state.reconcileRunning(context.Background(), s.deps)
 	if s.deps.listCandidates != nil {
-		if candidates, err := s.deps.listCandidates(context.Background()); err == nil {
+		candidates, err := s.deps.listCandidates(context.Background())
+		if err != nil {
+			slog.Error("list candidates failed", "error", err)
+		} else {
 			s.state.processCandidates(context.Background(), s.deps, candidates)
 		}
 	}

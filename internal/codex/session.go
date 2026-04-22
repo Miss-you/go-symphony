@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -310,10 +311,16 @@ func (s *Session) Close() error {
 		return nil
 	}
 	s.closed = true
+	slog.Debug("codex session closing", "thread_id", s.threadID)
 	if s.transport == nil {
 		return nil
 	}
-	return s.transport.Close()
+	if err := s.transport.Close(); err != nil {
+		slog.Debug("codex session transport close error", "thread_id", s.threadID, "error", err)
+		return err
+	}
+	slog.Debug("codex session closed", "thread_id", s.threadID)
+	return nil
 }
 
 func (s *Session) RunTurn(ctx context.Context, req TurnRequest) (TurnResult, error) {
@@ -332,7 +339,9 @@ func (s *Session) RunTurn(ctx context.Context, req TurnRequest) (TurnResult, err
 		s.mu.Unlock()
 		return TurnResult{}, errors.New("codex session is closed")
 	}
+	threadID := s.threadID
 	s.mu.Unlock()
+	slog.Debug("codex turn start", "thread_id", threadID, "title", req.Title)
 
 	if err := s.write(ctx, map[string]any{
 		"method": "turn/start",
@@ -599,7 +608,19 @@ func StartProcessTransport(ctx context.Context, req TransportRequest) (Transport
 	}
 	go transport.scan(stdout)
 	go func() {
-		_, _ = io.Copy(io.Discard, stderr)
+		scanner := bufio.NewScanner(stderr)
+		const maxCapacity = 512 * 1024
+		buf := make([]byte, maxCapacity)
+		scanner.Buffer(buf, maxCapacity)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line != "" {
+				slog.Debug("codex stderr", "line", line)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			slog.Debug("codex stderr scanner error", "error", err)
+		}
 	}()
 	return transport, nil
 }

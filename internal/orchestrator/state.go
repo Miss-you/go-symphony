@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -180,18 +181,26 @@ func (s *schedulerState) requestRefresh() refreshResult {
 }
 
 func (s *schedulerState) processCandidates(ctx context.Context, deps serviceDeps, candidates []domain.WorkItem) {
+	slog.Debug("processing candidates", "count", len(candidates), "running", len(s.running), "retrying", len(s.retrying))
 	sorted := sortCandidates(candidates)
+	dispatched := 0
 	for _, item := range sorted {
 		if !s.shouldDispatch(item) {
+			slog.Debug("candidate skipped", "item_id", item.ID, "identifier", item.Identifier, "reason", "shouldDispatch=false")
 			continue
 		}
 		refreshed, ok := s.revalidateCandidate(ctx, deps, item.ID)
 		if !ok {
+			slog.Debug("candidate revalidation failed", "item_id", item.ID, "identifier", item.Identifier)
 			continue
 		}
 		if s.dispatchItem(ctx, deps, refreshed, 0, "") {
+			dispatched++
 			continue
 		}
+	}
+	if dispatched > 0 {
+		slog.Info("dispatched candidates", "count", dispatched)
 	}
 }
 
@@ -217,6 +226,7 @@ func (s *schedulerState) revalidateCandidate(ctx context.Context, deps serviceDe
 func (s *schedulerState) dispatchItem(ctx context.Context, deps serviceDeps, item domain.WorkItem, attempt int, preferredHost string) bool {
 	host, admitted := s.admitHost(deps, preferredHost)
 	if !admitted {
+		slog.Debug("dispatch rejected: no host admitted", "item_id", item.ID, "identifier", item.Identifier)
 		return false
 	}
 
@@ -231,6 +241,7 @@ func (s *schedulerState) dispatchItem(ctx context.Context, deps serviceDeps, ite
 			} else {
 				nextAttempt++
 			}
+			slog.Error("dispatch failed: startRun error", "item_id", item.ID, "identifier", item.Identifier, "error", err, "attempt", nextAttempt)
 			s.scheduleFailureRetry(item.ID, item.Identifier, nextAttempt, fmt.Sprintf("failed to start run: %v", err), host, "")
 			return false
 		}
@@ -251,6 +262,7 @@ func (s *schedulerState) dispatchItem(ctx context.Context, deps serviceDeps, ite
 		Handle:        result.Handle,
 	}
 	delete(s.retrying, item.ID)
+	slog.Info("run dispatched", "item_id", item.ID, "identifier", item.Identifier, "host", firstNonEmpty(result.WorkerHost, host), "attempt", attempt)
 	return true
 }
 
@@ -420,9 +432,11 @@ func (s *schedulerState) reconcileStalled(ctx context.Context, deps serviceDeps)
 		if now.Sub(lastActivity) <= s.stallTimeout {
 			continue
 		}
+		duration := now.Sub(lastActivity).Round(time.Millisecond)
+		slog.Warn("run stalled", "item_id", itemID, "identifier", entry.Item.Identifier, "duration", duration, "attempt", entry.Attempt)
 		delete(s.running, itemID)
 		s.stopWithIntent(ctx, deps, itemID, entry.Item.Identifier, entry.Handle, false)
-		s.scheduleFailureRetry(itemID, entry.Item.Identifier, nextFailureAttempt(entry.Attempt), fmt.Sprintf("stalled for %s without worker activity", now.Sub(lastActivity).Round(time.Millisecond)), entry.WorkerHost, entry.WorkspacePath)
+		s.scheduleFailureRetry(itemID, entry.Item.Identifier, nextFailureAttempt(entry.Attempt), fmt.Sprintf("stalled for %s without worker activity", duration), entry.WorkerHost, entry.WorkspacePath)
 	}
 }
 
@@ -437,6 +451,7 @@ func (s *schedulerState) reconcileRunning(ctx context.Context, deps serviceDeps)
 	}
 	refreshed, err := deps.refreshItems(ctx, ids)
 	if err != nil {
+		slog.Error("refresh running items failed", "error", err, "count", len(ids))
 		return
 	}
 	visible := make(map[string]domain.WorkItem, len(refreshed))
@@ -465,6 +480,7 @@ func (s *schedulerState) reconcileRunning(ctx context.Context, deps serviceDeps)
 }
 
 func (s *schedulerState) invalidateRun(ctx context.Context, deps serviceDeps, entry runningEntry, cleanup bool) {
+	slog.Info("run invalidated", "item_id", entry.Item.ID, "identifier", entry.Item.Identifier, "state", entry.Item.State, "cleanup", cleanup)
 	delete(s.running, entry.Item.ID)
 	delete(s.claimed, entry.Item.ID)
 	delete(s.retrying, entry.Item.ID)
@@ -522,16 +538,18 @@ func (s *schedulerState) scheduleFailureRetry(itemID, identifier string, attempt
 		attempt = 1
 	}
 	s.retryNonce++
+	delay := failureRetryDelay(attempt, s.maxRetryBackoff)
 	s.retrying[itemID] = retryEntry{
 		ItemID:         itemID,
 		ItemIdentifier: identifier,
 		Attempt:        attempt,
-		DueAt:          s.clock.Now().Add(failureRetryDelay(attempt, s.maxRetryBackoff)),
+		DueAt:          s.clock.Now().Add(delay),
 		LastError:      lastError,
 		WorkerHost:     workerHost,
 		WorkspacePath:  workspacePath,
 		Nonce:          s.retryNonce,
 	}
+	slog.Warn("retry scheduled", "item_id", itemID, "identifier", identifier, "attempt", attempt, "delay", delay, "error", lastError)
 }
 
 func (s *schedulerState) applyAggregateDelta(entry *runningEntry, totals domain.CodexTotals) {
