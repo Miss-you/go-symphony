@@ -280,7 +280,7 @@ func defaultLegacyWorkflowConfig() legacyWorkflowConfig {
 			ApprovalPolicy: map[string]any{"reject": map[string]any{"sandbox_approval": true, "rules": true, "mcp_elicitations": true}},
 			ThreadSandbox:  "workspace-write",
 			TurnTimeoutMS:  3_600_000,
-			ReadTimeoutMS:  5_000,
+			ReadTimeoutMS:  30_000,
 			StallTimeoutMS: 300_000,
 		},
 		Hooks: legacyHookConfig{
