@@ -456,6 +456,88 @@ func TestRunTurnRequiresNonInteractiveForUserInput(t *testing.T) {
 	}
 }
 
+func TestRunTurnOmitsEmptySandboxPolicy(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	workspacePath := filepath.Join(root, "MT-SANDBOX")
+	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	transport := newScriptedTransport(
+		`{"id":1,"result":{}}`,
+		`{"id":2,"result":{"thread":{"id":"thread-sandbox"}}}`,
+		`{"id":3,"result":{"turn":{"id":"turn-sandbox"}}}`,
+		`{"method":"turn/completed","params":{}}`,
+	)
+
+	session, err := StartSession(context.Background(), SessionOptions{
+		Config: Config{
+			Command:        "codex app-server",
+			WorkspaceRoot:  root,
+			ReadTimeout:    time.Second,
+			ApprovalPolicy: "never",
+		},
+		WorkspacePath:     workspacePath,
+		TransportFactory:  (&recordingFactory{transport: transport}).Start,
+		ToolHandler:       ToolHandlerFunc(func(context.Context, ToolCall) (ToolResult, error) { return ToolResult{}, ErrUnsupportedTool }),
+		NonInteractive:    true,
+		TurnSandboxPolicy: map[string]any{}, // empty map should be omitted
+	})
+	if err != nil {
+		t.Fatalf("StartSession returned error: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	if _, err := session.RunTurn(context.Background(), TurnRequest{Prompt: "test", Title: "MT-SANDBOX"}); err != nil {
+		t.Fatalf("RunTurn returned error: %v", err)
+	}
+
+	writes := transport.writes()
+	turnStart := assertMethod(t, writes[3], "turn/start")
+	params := mapValue(t, turnStart, "params")
+	if _, exists := params["sandboxPolicy"]; exists {
+		t.Fatalf("turn/start params contained sandboxPolicy with empty TurnSandboxPolicy: %#v", params)
+	}
+
+	// Verify non-empty TurnSandboxPolicy is still included
+	transport2 := newScriptedTransport(
+		`{"id":1,"result":{}}`,
+		`{"id":2,"result":{"thread":{"id":"thread-sandbox2"}}}`,
+		`{"id":3,"result":{"turn":{"id":"turn-sandbox2"}}}`,
+		`{"method":"turn/completed","params":{}}`,
+	)
+	session2, err := StartSession(context.Background(), SessionOptions{
+		Config: Config{
+			Command:        "codex app-server",
+			WorkspaceRoot:  root,
+			ReadTimeout:    time.Second,
+			ApprovalPolicy: "never",
+		},
+		WorkspacePath:     workspacePath,
+		TransportFactory:  (&recordingFactory{transport: transport2}).Start,
+		ToolHandler:       ToolHandlerFunc(func(context.Context, ToolCall) (ToolResult, error) { return ToolResult{}, ErrUnsupportedTool }),
+		NonInteractive:    true,
+		TurnSandboxPolicy: map[string]any{"type": "workspaceWrite"},
+	})
+	if err != nil {
+		t.Fatalf("StartSession returned error: %v", err)
+	}
+	defer func() { _ = session2.Close() }()
+
+	if _, err := session2.RunTurn(context.Background(), TurnRequest{Prompt: "test2", Title: "MT-SANDBOX"}); err != nil {
+		t.Fatalf("RunTurn returned error: %v", err)
+	}
+
+	writes2 := transport2.writes()
+	turnStart2 := assertMethod(t, writes2[3], "turn/start")
+	params2 := mapValue(t, turnStart2, "params")
+	if _, exists := params2["sandboxPolicy"]; !exists {
+		t.Fatalf("turn/start params missing sandboxPolicy with non-empty TurnSandboxPolicy: %#v", params2)
+	}
+}
+
 func TestTimeoutsAreClassified(t *testing.T) {
 	t.Parallel()
 

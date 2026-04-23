@@ -347,7 +347,7 @@ func (s *Session) RunTurn(ctx context.Context, req TurnRequest) (TurnResult, err
 	slog.Debug("codex turn start", "thread_id", threadID, "title", req.Title)
 
 	turnParams := map[string]any{
-		"threadId":       s.threadID,
+		"threadId":       threadID,
 		"input":          []map[string]any{{"type": "text", "text": req.Prompt}},
 		"cwd":            s.workspacePath,
 		"title":          req.Title,
@@ -493,7 +493,12 @@ func (s *Session) awaitResponse(ctx context.Context, id any) (map[string]any, er
 					}
 				}
 			}
-			slog.Error("codex protocol error", "message", msg)
+			slog.Error("codex protocol error",
+				"message", msg,
+				"thread_id", s.threadID,
+				"expected_id", fmt.Sprint(id),
+				"response_id", fmt.Sprint(payload["id"]),
+			)
 			return nil, &ProtocolError{Kind: "response_error", Message: msg, Payload: payload}
 		}
 		result, ok := payload["result"].(map[string]any)
@@ -613,9 +618,9 @@ func StartProcessTransport(ctx context.Context, req TransportRequest) (Transport
 	if err != nil {
 		return nil, err
 	}
-	slog.Debug("codex transport starting", "command", command, "dir", req.Dir)
+	slog.Debug("codex transport starting", "command", sanitizeCommand(command), "dir", req.Dir)
 	if err := cmd.Start(); err != nil {
-		slog.Error("codex transport start failed", "error", err, "command", command)
+		slog.Error("codex transport start failed", "error", err, "command", sanitizeCommand(command))
 		return nil, err
 	}
 
@@ -715,7 +720,7 @@ func (t *processTransport) scan(reader io.Reader) {
 
 func normalizeConfig(cfg Config) Config {
 	if cfg.ReadTimeout <= 0 {
-		cfg.ReadTimeout = 5 * time.Second
+		cfg.ReadTimeout = 30 * time.Second
 	}
 	if cfg.TurnTimeout <= 0 {
 		cfg.TurnTimeout = time.Hour
@@ -982,6 +987,17 @@ func intValue(value any) int {
 func isNeverApprovalPolicy(value any) bool {
 	policy, ok := value.(string)
 	return ok && strings.EqualFold(strings.TrimSpace(policy), "never")
+}
+
+func sanitizeCommand(command string) string {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return ""
+	}
+	if len(fields) <= 3 {
+		return strings.Join(fields, " ")
+	}
+	return strings.Join(fields[:3], " ") + " ..."
 }
 
 func cloneValue(value any) any {

@@ -49,7 +49,7 @@ reader.ReadBytes('\n')
 ```go
 session, err := codex.StartSession(ctx, codex.SessionOptions{
     Config: cfg,
-    WorkspacePath: "/Users/yousa/symphony_workspaces/YOU-23",
+    WorkspacePath: "/path/to/symphony_workspaces/YOU-23",
 })
 ```
 
@@ -209,4 +209,4 @@ if responseError, ok := payload["error"]; ok {
 
 1. **Codex 推理耗时**：使用 `gpt-5.4` + `reasoning_effort=xhigh` 时，单次 `RunTurn` 可能需要数十秒到数分钟。运行 `symphony-verify run` 时建议设置足够长的 `--timeout`（例如 `--timeout 10m`），否则会在模型推理中途被 `context canceled` 中断。
 
-2. **未修改 Codex 代码**：本次调查仅修改了 go-symphony 仓库内的代码，未触碰 `/Users/yousa/Documents/Github/codex/` 中的 Codex 源码。Codex 源码仅用于参考协议 schema。
+2. **未修改 Codex 代码**：本次调查仅修改了 go-symphony 仓库内的代码，未触碰本地 Codex 仓库中的源码。Codex 源码仅用于参考协议 schema。
